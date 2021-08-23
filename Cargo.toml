@@ -1,0 +1,21 @@
+[package]
+name = "bgpfu"
+version = "0.1.0-alpha.1"
+edition = "2018"
+authors = ["Ben Maddison <benm@workonline.africa>"]
+description = "A toolset for working with IRR data"
+license = "MIT"
+repository = "https://github.com/bgpfu/bgpfu-rs"
+readme = "README.md"
+keywords = ["irr", "rpsl", "bgp"]
+categories = ["network-programming", "database"]
+
+[dependencies]
+ipnet = "^2.3"
+irrc = "0.1.0-rc.1"
+log = "^0.4"
+prefixset = "0.1.0-rc.2"
+simple_logger = {version = "^1.13", features = ["stderr"]}
+
+[dev-dependencies]
+version-sync = "^0.9"
