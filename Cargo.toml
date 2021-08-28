@@ -11,11 +11,19 @@ keywords = ["irr", "rpsl", "bgp"]
 categories = ["network-programming", "database"]
 
 [dependencies]
+anyhow = "^1.0"
 ipnet = "^2.3"
-irrc = "0.1.0-rc.1"
+irrc = "0.1.0-rc.2"
+itertools = "^0.10"
 log = "^0.4"
+num = "^0.4"
+pest = "^2.1"
+pest_derive = "^2.1"
 prefixset = "0.1.0-rc.2"
 simple_logger = {version = "^1.13", features = ["stderr"]}
+structopt = "^0.3"
+strum = {version = "^0.21", features = ["derive"]}
 
 [dev-dependencies]
+paste = "^1.0"
 version-sync = "^0.9"
