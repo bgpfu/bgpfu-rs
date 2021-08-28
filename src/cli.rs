@@ -1,11 +1,15 @@
-use structopt::StructOpt;
+use structopt::{clap::AppSettings, StructOpt};
 use strum::{EnumString, EnumVariantNames, VariantNames};
 
 use crate::{ast::FilterExpr, query::AddressFamilyFilter};
 
 /// An IRR query and filter generation toolset.
 #[derive(StructOpt, Debug)]
-#[structopt(rename_all = "kebab_case")]
+#[structopt(
+    rename_all = "kebab_case",
+    after_help = "See '--help' for detailed usage information.\n",
+    setting = AppSettings::ColoredHelp,
+)]
 pub struct Args {
     /// IRRd server hostname or IP address.
     #[structopt(short = "H", long, default_value = "whois.radb.net")]
@@ -39,6 +43,16 @@ pub struct Args {
     format: Format,
 
     /// RPSL filter expression to evaluate.
+    ///
+    /// An RPSL '<mp-filter>' expression, as defined in [RFC4012] and
+    /// [RFC2622].
+    ///
+    /// Currently only expressions evaluating to an "Address-Prefix Set" are
+    /// supported.
+    ///
+    /// [RFC2622]: https://datatracker.ietf.org/doc/html/rfc2622#section-5.4
+    ///
+    /// [RFC4012]: https://datatracker.ietf.org/doc/html/rfc4012#section-2.5.2
     filter: FilterExpr,
 }
 
