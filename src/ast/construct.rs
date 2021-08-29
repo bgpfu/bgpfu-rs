@@ -5,8 +5,8 @@ use anyhow::{anyhow, Error, Result};
 use pest::{iterators::Pair, Parser};
 
 use super::{
-    FilterExpr, FilterTerm, LiteralPrefixSetEntry, NamedPrefixSet, PrefixOp, PrefixSetExpr,
-    PrefixSetOp,
+    AsSetExpr, FilterExpr, FilterSetExpr, FilterTerm, LiteralPrefixSetEntry, NamedPrefixSet,
+    PrefixOp, PrefixSetExpr, PrefixSetOp, RouteSetExpr, SetNameComp,
 };
 use crate::parser::{FilterParser, Rule};
 
@@ -26,10 +26,25 @@ macro_rules! next_parse_or {
     };
 }
 
+macro_rules! debug_construction {
+    ( $pair:ident => $node:ty ) => {
+        log::debug!(
+            concat!(
+                "constructing AST node '",
+                stringify!($node),
+                "' from token pair {:?}: '{}'"
+            ),
+            $pair.as_rule(),
+            $pair.as_str()
+        )
+    };
+}
+
 impl FromStr for FilterExpr {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
+        log::debug!("trying to parse filter expression: '{}'", s);
         let root = FilterParser::parse(Rule::filter, s)?
             .next()
             .ok_or_else(|| anyhow!("failed to get root filter expression"))?;
@@ -41,6 +56,7 @@ impl TryFrom<Pair<'_, Rule>> for FilterExpr {
     type Error = Error;
 
     fn try_from(pair: Pair<Rule>) -> Result<Self> {
+        debug_construction!(pair => FilterExpr);
         match pair.as_rule() {
             Rule::filter_expr_unit => Ok(Self::Unit(
                 next_into_or!(pair.into_inner() => "failed to get inner filter term"),
@@ -77,6 +93,7 @@ impl TryFrom<Pair<'_, Rule>> for FilterTerm {
     type Error = Error;
 
     fn try_from(pair: Pair<Rule>) -> Result<Self> {
+        debug_construction!(pair => FilterTerm);
         match pair.as_rule() {
             Rule::literal_filter => {
                 let mut pairs = pair.into_inner();
@@ -89,11 +106,7 @@ impl TryFrom<Pair<'_, Rule>> for FilterTerm {
                 ))
             }
             Rule::named_filter => Ok(Self::Named(
-                pair.into_inner()
-                    .next()
-                    .ok_or_else(|| anyhow!("failed to get inner filter-set name"))?
-                    .as_str()
-                    .to_string(),
+                next_into_or!(pair.into_inner() => "failed to get inner filter-set name"),
             )),
             Rule::filter_expr_unit
             | Rule::filter_expr_not
@@ -108,6 +121,7 @@ impl TryFrom<Pair<'_, Rule>> for PrefixSetOp {
     type Error = Error;
 
     fn try_from(pair: Pair<Rule>) -> Result<Self> {
+        debug_construction!(pair => PrefixSetOp);
         match pair.as_rule() {
             Rule::less_excl => Ok(Self::LessExcl),
             Rule::less_incl => Ok(Self::LessIncl),
@@ -123,6 +137,7 @@ impl TryFrom<Pair<'_, Rule>> for PrefixSetExpr {
     type Error = Error;
 
     fn try_from(pair: Pair<Rule>) -> Result<Self> {
+        debug_construction!(pair => PrefixSetExpr);
         match pair.as_rule() {
             Rule::literal_prefix_set => Ok(Self::Literal(
                 pair.into_inner()
@@ -140,10 +155,30 @@ impl TryFrom<Pair<'_, Rule>> for PrefixSetExpr {
     }
 }
 
+impl TryFrom<Pair<'_, Rule>> for FilterSetExpr {
+    type Error = Error;
+
+    fn try_from(pair: Pair<Rule>) -> Result<Self> {
+        debug_construction!(pair => FilterSetExpr);
+        match pair.as_rule() {
+            Rule::filter_set => Ok(Self::Pending(
+                pair.into_inner()
+                    .map(|inner| inner.try_into())
+                    .collect::<Result<_>>()?,
+            )),
+            _ => Err(anyhow!(
+                "expected filter-set expression, got '{}'",
+                pair.as_str()
+            )),
+        }
+    }
+}
+
 impl TryFrom<Pair<'_, Rule>> for LiteralPrefixSetEntry {
     type Error = Error;
 
     fn try_from(pair: Pair<Rule>) -> Result<Self> {
+        debug_construction!(pair => LiteralPrefixSetEntry);
         let mut pairs = pair.into_inner();
         let prefix = next_parse_or!(pairs => "failed to get inner prefix");
         let op = match pairs.next() {
@@ -158,6 +193,7 @@ impl TryFrom<Pair<'_, Rule>> for PrefixOp {
     type Error = Error;
 
     fn try_from(pair: Pair<Rule>) -> Result<Self> {
+        debug_construction!(pair => PrefixOp);
         match pair.as_rule() {
             Rule::less_excl => Ok(Self::LessExcl),
             Rule::less_incl => Ok(Self::LessIncl),
@@ -183,14 +219,72 @@ impl TryFrom<Pair<'_, Rule>> for NamedPrefixSet {
     type Error = Error;
 
     fn try_from(pair: Pair<Rule>) -> Result<Self> {
+        debug_construction!(pair => NamedPrefixSet);
         match pair.as_rule() {
             Rule::any_route => Ok(Self::Any),
             Rule::peeras => Ok(Self::PeerAs),
-            Rule::route_set => Ok(Self::RouteSet(pair.as_str().parse()?)),
-            Rule::as_set => Ok(Self::AsSet(pair.as_str().parse()?)),
+            Rule::route_set => Ok(Self::RouteSet(pair.try_into()?)),
+            Rule::as_set => Ok(Self::AsSet(pair.try_into()?)),
             Rule::autnum => Ok(Self::AutNum(pair.as_str().parse()?)),
             _ => Err(anyhow!(
                 "expected a named prefix variant, got '{}'",
+                pair.as_str()
+            )),
+        }
+    }
+}
+
+impl TryFrom<Pair<'_, Rule>> for RouteSetExpr {
+    type Error = Error;
+
+    fn try_from(pair: Pair<Rule>) -> Result<Self> {
+        debug_construction!(pair => RouteSetExpr);
+        match pair.as_rule() {
+            Rule::route_set => Ok(Self::Pending(
+                pair.into_inner()
+                    .map(|inner| inner.try_into())
+                    .collect::<Result<_>>()?,
+            )),
+            _ => Err(anyhow!(
+                "expected route-set expression, got '{}'",
+                pair.as_str()
+            )),
+        }
+    }
+}
+
+impl TryFrom<Pair<'_, Rule>> for AsSetExpr {
+    type Error = Error;
+
+    fn try_from(pair: Pair<Rule>) -> Result<Self> {
+        debug_construction!(pair => AsSetExpr);
+        match pair.as_rule() {
+            Rule::as_set => Ok(Self::Pending(
+                pair.into_inner()
+                    .map(|inner| inner.try_into())
+                    .collect::<Result<_>>()?,
+            )),
+            _ => Err(anyhow!(
+                "expected as-set expression, got '{}'",
+                pair.as_str()
+            )),
+        }
+    }
+}
+
+impl TryFrom<Pair<'_, Rule>> for SetNameComp {
+    type Error = Error;
+
+    fn try_from(pair: Pair<Rule>) -> Result<Self> {
+        debug_construction!(pair => SetNameComp);
+        match pair.as_rule() {
+            Rule::autnum => Ok(Self::AutNum(pair.as_str().parse()?)),
+            Rule::peeras => Ok(Self::PeerAs),
+            Rule::filter_set_name | Rule::route_set_name | Rule::as_set_name => {
+                Ok(Self::Name(pair.as_str().to_string()))
+            }
+            _ => Err(anyhow!(
+                "expected set name component, got '{}'",
                 pair.as_str()
             )),
         }
@@ -226,22 +320,32 @@ mod tests {
             )),
         simple_as_set: "AS-FOO" =>
             FilterExpr::Unit(FilterTerm::Literal(
-                PrefixSetExpr::Named(NamedPrefixSet::AsSet("AS-FOO".parse().unwrap())),
+                PrefixSetExpr::Named(NamedPrefixSet::AsSet(AsSetExpr::Pending(vec![
+                    SetNameComp::Name("AS-FOO".to_string())
+                ]))),
                 PrefixSetOp::None
             )),
         hierarchical_as_set: "AS65000:AS-FOO" =>
             FilterExpr::Unit(FilterTerm::Literal(
-                PrefixSetExpr::Named(NamedPrefixSet::AsSet("AS65000:AS-FOO".parse().unwrap())),
+                PrefixSetExpr::Named(NamedPrefixSet::AsSet(AsSetExpr::Pending(vec![
+                    SetNameComp::AutNum("AS65000".parse().unwrap()),
+                    SetNameComp::Name("AS-FOO".to_string())
+                ]))),
                 PrefixSetOp::None
             )),
         simple_route_set: "RS-FOO" =>
             FilterExpr::Unit(FilterTerm::Literal(
-                PrefixSetExpr::Named(NamedPrefixSet::RouteSet("RS-FOO".parse().unwrap())),
+                PrefixSetExpr::Named(NamedPrefixSet::RouteSet(RouteSetExpr::Pending(vec![
+                    SetNameComp::Name("RS-FOO".to_string())
+                ]))),
                 PrefixSetOp::None
             )),
         hierarchical_route_set: "AS65000:RS-FOO" =>
             FilterExpr::Unit(FilterTerm::Literal(
-                PrefixSetExpr::Named(NamedPrefixSet::RouteSet("AS65000:RS-FOO".parse().unwrap())),
+                PrefixSetExpr::Named(NamedPrefixSet::RouteSet(RouteSetExpr::Pending(vec![
+                    SetNameComp::AutNum("AS65000".parse().unwrap()),
+                    SetNameComp::Name("RS-FOO".to_string())
+                ]))),
                 PrefixSetOp::None
             )),
         peeras: "PeerAS" =>
@@ -296,31 +400,14 @@ mod tests {
                     PrefixSetOp::None
                 ))
             ))),
-        parens_simple_as_set: "(AS-FOO)" =>
+        parens_hierarchical_as_set: "(AS65000:AS-FOO:PeerAS)" =>
             FilterExpr::Unit(FilterTerm::Expr(Box::new(
                 FilterExpr::Unit(FilterTerm::Literal(
-                    PrefixSetExpr::Named(NamedPrefixSet::AsSet("AS-FOO".parse().unwrap())),
-                    PrefixSetOp::None
-                ))
-            ))),
-        parens_hierarchical_as_set: "(AS65000:AS-FOO)" =>
-            FilterExpr::Unit(FilterTerm::Expr(Box::new(
-                FilterExpr::Unit(FilterTerm::Literal(
-                    PrefixSetExpr::Named(NamedPrefixSet::AsSet("AS65000:AS-FOO".parse().unwrap())),
-                    PrefixSetOp::None
-                ))
-            ))),
-        parens_simple_route_set: "(RS-FOO)" =>
-            FilterExpr::Unit(FilterTerm::Expr(Box::new(
-                FilterExpr::Unit(FilterTerm::Literal(
-                    PrefixSetExpr::Named(NamedPrefixSet::RouteSet("RS-FOO".parse().unwrap())),
-                    PrefixSetOp::None
-                ))
-            ))),
-        parens_hierarchical_route_set: "(AS65000:RS-FOO)" =>
-            FilterExpr::Unit(FilterTerm::Expr(Box::new(
-                FilterExpr::Unit(FilterTerm::Literal(
-                    PrefixSetExpr::Named(NamedPrefixSet::RouteSet("AS65000:RS-FOO".parse().unwrap())),
+                    PrefixSetExpr::Named(NamedPrefixSet::AsSet(AsSetExpr::Pending(vec![
+                        SetNameComp::AutNum("AS65000".parse().unwrap()),
+                        SetNameComp::Name("AS-FOO".to_string()),
+                        SetNameComp::PeerAs,
+                    ]))),
                     PrefixSetOp::None
                 ))
             ))),

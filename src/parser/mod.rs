@@ -27,7 +27,9 @@ mod tests {
             parser: FilterParser,
             input: "AS-FOO",
             rule: Rule::as_set,
-            tokens: [as_set(0, 6)]
+            tokens: [as_set(0, 6, [
+                as_set_name(0, 6)
+            ])]
         }
     }
 
@@ -37,7 +39,24 @@ mod tests {
             parser: FilterParser,
             input: "AS65000:AS-FOO",
             rule: Rule::as_set,
-            tokens: [as_set(0, 14)]
+            tokens: [as_set(0, 14, [
+                autnum(0, 7),
+                as_set_name(8, 14)
+            ])]
+        }
+    }
+
+    #[test]
+    fn parse_hierarchical_peeras_as_set() {
+        parses_to! {
+            parser: FilterParser,
+            input: "AS65000:AS-FOO:PeerAS",
+            rule: Rule::as_set,
+            tokens: [as_set(0, 21, [
+                autnum(0, 7),
+                as_set_name(8, 14),
+                peeras(15, 21)
+            ])]
         }
     }
 
@@ -47,7 +66,9 @@ mod tests {
             parser: FilterParser,
             input: "RS-FOO",
             rule: Rule::route_set,
-            tokens: [route_set(0, 6)]
+            tokens: [route_set(0, 6, [
+                route_set_name(0, 6)
+            ])]
         }
     }
 
@@ -57,7 +78,10 @@ mod tests {
             parser: FilterParser,
             input: "RS-FOO:RS-BAR",
             rule: Rule::route_set,
-            tokens: [route_set(0, 13)]
+            tokens: [route_set(0, 13, [
+                route_set_name(0, 6),
+                route_set_name(7, 13)
+            ])]
         }
     }
 
@@ -67,7 +91,9 @@ mod tests {
             parser: FilterParser,
             input: "FLTR-FOO",
             rule: Rule::filter_set,
-            tokens: [filter_set(0, 8)]
+            tokens: [filter_set(0, 8, [
+                filter_set_name(0, 8)
+            ])]
         }
     }
 
@@ -77,7 +103,11 @@ mod tests {
             parser: FilterParser,
             input: "AS65000:FLTR-FOO:PeerAS",
             rule: Rule::filter_set,
-            tokens: [filter_set(0, 23)]
+            tokens: [filter_set(0, 23, [
+                autnum(0, 7),
+                filter_set_name(8, 16),
+                peeras(17, 23)
+            ])]
         }
     }
 
@@ -263,7 +293,9 @@ mod tests {
             rule: Rule::named_prefix_set,
             tokens: [
                 named_prefix_set(0, 6, [
-                    as_set(0, 6)
+                    as_set(0, 6, [
+                        as_set_name(0, 6)
+                    ])
                 ])
             ]
         }
@@ -278,7 +310,9 @@ mod tests {
             tokens: [
                 literal_filter(0, 8, [
                     named_prefix_set(0, 6, [
-                        as_set(0, 6)
+                        as_set(0, 6, [
+                            as_set_name(0, 6)
+                        ])
                     ]),
                     less_incl(6, 8)
                 ])
@@ -326,25 +360,31 @@ mod tests {
         single_filter_set: "FLTR-FOO" => [
             filter_expr_unit(0, 8, [
                 named_filter(0, 8, [
-                    filter_set(0, 8)
-                ])
-            ])
-        ],
-        single_autnum: "AS-FOO" => [
-            filter_expr_unit(0, 6, [
-                literal_filter(0, 6, [
-                    named_prefix_set(0, 6, [
-                        as_set(0, 6)
+                    filter_set(0, 8, [
+                        filter_set_name(0, 8)
                     ])
                 ])
             ])
         ],
-        parens_autnum: "(AS-FOO)" => [
+        single_as_set: "AS-FOO" => [
+            filter_expr_unit(0, 6, [
+                literal_filter(0, 6, [
+                    named_prefix_set(0, 6, [
+                        as_set(0, 6, [
+                            as_set_name(0, 6)
+                        ])
+                    ])
+                ])
+            ])
+        ],
+        parens_as_set: "(AS-FOO)" => [
             filter_expr_unit(0, 8, [
                 filter_expr_unit(1, 7, [
                     literal_filter(1, 7, [
                         named_prefix_set(1, 7, [
-                            as_set(1, 7)
+                            as_set(1, 7, [
+                                as_set_name(1, 7)
+                            ])
                         ])
                     ])
                 ])
@@ -370,7 +410,9 @@ mod tests {
                 ]),
                 literal_filter(21, 27, [
                     named_prefix_set(21, 27, [
-                        as_set(21, 27)
+                        as_set(21, 27, [
+                            as_set_name(21, 27)
+                        ])
                     ])
                 ])
             ])
@@ -378,11 +420,15 @@ mod tests {
         or_expr: "FLTR-FOO OR RS-BAR" => [
             filter_expr_or(0, 18, [
                 named_filter(0, 8, [
-                    filter_set(0, 8)
+                    filter_set(0, 8, [
+                        filter_set_name(0, 8)
+                    ])
                 ]),
                 literal_filter(12, 18, [
                     named_prefix_set(12, 18, [
-                        route_set(12, 18)
+                        route_set(12, 18, [
+                            route_set_name(12, 18)
+                        ])
                     ])
                 ])
             ])
@@ -399,7 +445,11 @@ mod tests {
                         ]),
                         literal_filter(14, 37, [
                             named_prefix_set(14, 35, [
-                                as_set(14, 35)
+                                as_set(14, 35, [
+                                    autnum(14, 21),
+                                    as_set_name(22, 28),
+                                    peeras(29, 35)
+                                ])
                             ]),
                             less_incl(35, 37)
                         ])

@@ -9,7 +9,7 @@ use prefixset::{Ipv4Prefix, Ipv6Prefix, PrefixSet};
 use strum::{EnumString, EnumVariantNames};
 
 use crate::{
-    ast::{Evaluate, FilterExpr},
+    ast::{Evaluate, FilterExpr, Substitute},
     cli::Args,
     collect::{Collector, CollectorHandle},
 };
@@ -100,6 +100,7 @@ impl AddressFamilyFilter {
 pub struct Resolver<'a> {
     conn: Connection,
     af_filter: &'a AddressFamilyFilter,
+    peeras: Option<&'a AutNum>,
 }
 
 impl<'a> Resolver<'a> {
@@ -107,7 +108,12 @@ impl<'a> Resolver<'a> {
     pub fn new(args: &'a Args) -> Result<Self> {
         let conn = IrrClient::new(args.addr()).connect()?;
         let af_filter = args.address_family();
-        Ok(Self { conn, af_filter })
+        let peeras = args.peeras();
+        Ok(Self {
+            conn,
+            af_filter,
+            peeras,
+        })
     }
 
     /// Get a mutable ref to the underlying [`Connection`].
@@ -118,6 +124,11 @@ impl<'a> Resolver<'a> {
     /// Get a ref to the [`AddressFamilyFilter`].
     fn af_filter(&self) -> &AddressFamilyFilter {
         self.af_filter
+    }
+
+    /// Get a ref to the `PeerAS` substitution [`AutNum`].
+    pub fn peeras(&self) -> Option<&AutNum> {
+        self.peeras
     }
 
     /// Filter a pair of [`PrefixSet`]s.
@@ -141,8 +152,8 @@ impl<'a> Resolver<'a> {
     }
 
     /// Resolve a [`FilterExpr`] into a [`PrefixSet`].
-    pub fn resolve(&mut self, filter: FilterExpr) -> Result<PrefixSetPair> {
-        filter.eval(self)
+    pub fn resolve(&mut self, filter: &FilterExpr) -> Result<PrefixSetPair> {
+        filter.substitute(self)?.eval(self)
     }
 
     /// Spawn a resolution [`Job`].

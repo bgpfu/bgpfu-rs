@@ -3,8 +3,9 @@ use irrc::types::{AsSet, AutNum, RouteSet};
 
 mod construct;
 mod eval;
+mod subst;
 
-pub use eval::Evaluate;
+pub use self::{eval::Evaluate, subst::Substitute};
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum FilterExpr {
@@ -17,11 +18,11 @@ pub enum FilterExpr {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum FilterTerm {
     Literal(PrefixSetExpr, PrefixSetOp),
-    Named(String),
+    Named(FilterSetExpr),
     Expr(Box<FilterExpr>),
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum PrefixSetOp {
     None,
     LessExcl,
@@ -35,12 +36,19 @@ pub enum PrefixSetExpr {
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub enum FilterSetExpr {
+    Pending(Vec<SetNameComp>),
+    // TODO: define type for filter-set names.
+    Ready(String),
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct LiteralPrefixSetEntry {
     prefix: IpNet,
     op: PrefixOp,
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 enum PrefixOp {
     None,
     LessExcl,
@@ -53,7 +61,26 @@ enum PrefixOp {
 pub enum NamedPrefixSet {
     Any,
     PeerAs,
-    RouteSet(RouteSet),
-    AsSet(AsSet),
+    RouteSet(RouteSetExpr),
+    AsSet(AsSetExpr),
     AutNum(AutNum),
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub enum RouteSetExpr {
+    Pending(Vec<SetNameComp>),
+    Ready(RouteSet),
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub enum AsSetExpr {
+    Pending(Vec<SetNameComp>),
+    Ready(AsSet),
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub enum SetNameComp {
+    AutNum(AutNum),
+    PeerAs,
+    Name(String),
 }

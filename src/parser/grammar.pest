@@ -10,15 +10,15 @@ peeras = @{ ^"PeerAS" }
 
 autnum = @{ ^"AS" ~ num }
 
-set_comp = @{ autnum | peeras }
+set_comp = _{ autnum | peeras }
 
-as_set = @{ ( set_comp ~ ":" )* ~ as_set_name ~ ( ":" ~ ( set_comp | as_set_name ) )* }
+as_set = ${ ( set_comp ~ ":" )* ~ as_set_name ~ ( ":" ~ ( set_comp | as_set_name ) )* }
     as_set_name = @{ ^"AS-" ~ extchar+ }
 
-route_set = @{ ( set_comp ~ ":" )* ~ route_set_name ~ ( ":" ~ ( set_comp | route_set_name ) )* }
+route_set = ${ ( set_comp ~ ":" )* ~ route_set_name ~ ( ":" ~ ( set_comp | route_set_name ) )* }
     route_set_name = @{ ^"RS-" ~ extchar+ }
 
-filter_set = @{ ( set_comp ~ ":" )* ~ filter_set_name ~ ( ":" ~ ( set_comp | filter_set_name ) )* }
+filter_set = ${ ( set_comp ~ ":" )* ~ filter_set_name ~ ( ":" ~ ( set_comp | filter_set_name ) )* }
     filter_set_name = @{ ^"FLTR-" ~ extchar+ }
 
 ipv4_prefix = @{ ipv4_addr ~ "/" ~ ipv4_prefix_len }

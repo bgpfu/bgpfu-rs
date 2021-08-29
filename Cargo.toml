@@ -20,7 +20,7 @@ num = "^0.4"
 pest = "^2.1"
 pest_derive = "^2.1"
 prefixset = "0.1.0-rc.2"
-simple_logger = {version = "^1.13", features = ["stderr"]}
+stderrlog = "^0.5"
 structopt = "^0.3"
 strum = {version = "^0.21", features = ["derive"]}
 

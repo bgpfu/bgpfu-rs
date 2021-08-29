@@ -5,8 +5,8 @@ use num::One;
 use prefixset::{IpPrefix, IpPrefixRange, Ipv4Prefix, Ipv6Prefix, PrefixSet};
 
 use super::{
-    FilterExpr, FilterTerm, LiteralPrefixSetEntry, NamedPrefixSet, PrefixOp, PrefixSetExpr,
-    PrefixSetOp,
+    AsSetExpr, FilterExpr, FilterTerm, LiteralPrefixSetEntry, NamedPrefixSet, PrefixOp,
+    PrefixSetExpr, PrefixSetOp, RouteSetExpr,
 };
 use crate::query::{PrefixSetPair, Resolver};
 
@@ -150,11 +150,36 @@ impl Evaluate for NamedPrefixSet {
     fn eval(self, resolver: &mut Resolver) -> Result<PrefixSetPair> {
         match self {
             Self::Any => Ok((Some(PrefixSet::one()), Some(PrefixSet::one()))),
-            // TODO
-            Self::PeerAs => unimplemented!("PeerAs substitution not yet implemented"),
-            Self::RouteSet(route_set) => resolver.job(route_set),
-            Self::AsSet(as_set) => resolver.job(as_set),
+            Self::PeerAs => Err(anyhow!(
+                "expected named prefix set, found un-substituted 'PeerAS' token"
+            )),
+            Self::RouteSet(route_set_expr) => route_set_expr.eval(resolver),
+            Self::AsSet(as_set_expr) => as_set_expr.eval(resolver),
             Self::AutNum(autnum) => resolver.job(autnum),
+        }
+    }
+}
+
+impl Evaluate for RouteSetExpr {
+    fn eval(self, resolver: &mut Resolver) -> Result<PrefixSetPair> {
+        match self {
+            Self::Ready(route_set) => resolver.job(route_set),
+            Self::Pending(comps) => Err(anyhow!(
+                "expected route-set, found pending route-set name components: {:?}",
+                comps
+            )),
+        }
+    }
+}
+
+impl Evaluate for AsSetExpr {
+    fn eval(self, resolver: &mut Resolver) -> Result<PrefixSetPair> {
+        match self {
+            Self::Ready(as_set) => resolver.job(as_set),
+            Self::Pending(comps) => Err(anyhow!(
+                "expected as-set, found pending as-set name components: {:?}",
+                comps
+            )),
         }
     }
 }
