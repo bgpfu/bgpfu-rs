@@ -10,12 +10,21 @@ use super::{
 };
 use crate::query::{PrefixSetPair, Resolver};
 
+macro_rules! debug_eval {
+    ( $node:ty ) => {
+        log::debug!(concat!("evaluating AST node '", stringify!($node),))
+    };
+}
+
 pub trait Evaluate {
     fn eval(self, resolver: &mut Resolver) -> Result<PrefixSetPair>;
 }
 
 impl Evaluate for FilterExpr {
     fn eval(self, resolver: &mut Resolver) -> Result<PrefixSetPair> {
+        // TODO: implement `fmt::Display` so that we can log the expr here
+        log::info!("trying to evaluate filter expression");
+        debug_eval!(FilterExpr);
         match self {
             Self::Unit(term) => term.eval(resolver),
             Self::Not(term) => {
@@ -58,6 +67,7 @@ impl Evaluate for FilterExpr {
 
 impl Evaluate for FilterTerm {
     fn eval(self, resolver: &mut Resolver) -> Result<PrefixSetPair> {
+        debug_eval!(FilterTerm);
         match self {
             Self::Literal(set_expr, op) => Ok(op.apply(set_expr.eval(resolver)?)),
             // TODO
@@ -102,6 +112,7 @@ impl PrefixSetOp {
 
 impl Evaluate for PrefixSetExpr {
     fn eval(self, resolver: &mut Resolver) -> Result<PrefixSetPair> {
+        debug_eval!(PrefixSetExpr);
         match self {
             Self::Literal(entries) => {
                 let sets = entries
@@ -148,6 +159,7 @@ impl PrefixOp {
 
 impl Evaluate for NamedPrefixSet {
     fn eval(self, resolver: &mut Resolver) -> Result<PrefixSetPair> {
+        debug_eval!(NamedPrefixSet);
         match self {
             Self::Any => Ok((Some(PrefixSet::one()), Some(PrefixSet::one()))),
             Self::PeerAs => Err(anyhow!(
@@ -162,6 +174,7 @@ impl Evaluate for NamedPrefixSet {
 
 impl Evaluate for RouteSetExpr {
     fn eval(self, resolver: &mut Resolver) -> Result<PrefixSetPair> {
+        debug_eval!(RouteSetExpr);
         match self {
             Self::Ready(route_set) => resolver.job(route_set),
             Self::Pending(comps) => Err(anyhow!(
@@ -174,6 +187,7 @@ impl Evaluate for RouteSetExpr {
 
 impl Evaluate for AsSetExpr {
     fn eval(self, resolver: &mut Resolver) -> Result<PrefixSetPair> {
+        debug_eval!(AsSetExpr);
         match self {
             Self::Ready(as_set) => resolver.job(as_set),
             Self::Pending(comps) => Err(anyhow!(

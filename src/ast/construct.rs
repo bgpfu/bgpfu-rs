@@ -44,7 +44,7 @@ impl FromStr for FilterExpr {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        log::debug!("trying to parse filter expression: '{}'", s);
+        log::info!("trying to parse filter expression: '{}'", s);
         let root = FilterParser::parse(Rule::filter, s)?
             .next()
             .ok_or_else(|| anyhow!("failed to get root filter expression"))?;

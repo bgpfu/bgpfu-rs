@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::mem;
 
 use anyhow::Result;
@@ -159,8 +160,9 @@ impl<'a> Resolver<'a> {
     /// Spawn a resolution [`Job`].
     pub fn job<T>(&mut self, object: T) -> Result<PrefixSetPair>
     where
-        T: IntoPipeline,
+        T: IntoPipeline + Display,
     {
+        log::info!("trying to resolve object '{}'", object);
         Job::spawn(self, object)?.join()
     }
 }

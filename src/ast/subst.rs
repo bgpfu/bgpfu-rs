@@ -20,6 +20,8 @@ pub trait Substitute: Sized {
 
 impl Substitute for FilterExpr {
     fn substitute(&self, resolver: &Resolver) -> Result<Self> {
+        // TODO: implement `fmt::Display` so that we can log the expr here
+        log::info!("trying to substitute 'PeerAS' tokens in filter expression");
         debug_substitution!(FilterExpr);
         match self {
             Self::Unit(term) => Ok(Self::Unit(term.substitute(resolver)?)),
