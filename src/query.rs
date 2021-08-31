@@ -1,3 +1,4 @@
+use std::default::Default;
 use std::fmt::Display;
 use std::mem;
 
@@ -7,7 +8,7 @@ use irrc::{
     Connection, IrrClient, Pipeline, Query, QueryResult,
 };
 use prefixset::{Ipv4Prefix, Ipv6Prefix, PrefixSet};
-use strum::{EnumString, EnumVariantNames};
+use strum::{AsRefStr, Display, EnumString, EnumVariantNames};
 
 use crate::{
     ast::{Evaluate, FilterExpr, Substitute},
@@ -56,7 +57,7 @@ impl IntoPipeline for RouteSet {
 }
 
 /// Query filter by address family.
-#[derive(Copy, Clone, Debug, EnumString, EnumVariantNames)]
+#[derive(AsRefStr, Copy, Clone, Debug, Display, EnumString, EnumVariantNames)]
 #[strum(serialize_all = "kebab_case")]
 pub enum AddressFamilyFilter {
     /// Query both IPv4 and IPv6 prefixes.
@@ -94,6 +95,12 @@ impl AddressFamilyFilter {
         ]
         .into_iter()
         .flatten()
+    }
+}
+
+impl Default for AddressFamilyFilter {
+    fn default() -> Self {
+        Self::Any
     }
 }
 

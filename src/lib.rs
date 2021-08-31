@@ -5,14 +5,16 @@
 #[macro_use]
 extern crate pest_derive;
 
-/// Command line argument handling
+/// Command line argument handling.
 pub mod cli;
+/// Query result output.
+pub mod output;
 /// Query pipelining and response handling.
 pub mod query;
 
-/// Query expression AST
+/// Query expression AST.
 mod ast;
 /// Collection of streams of IP prefixes into sets.
 mod collect;
-/// Query expression parser
+/// Query expression parser.
 mod parser;

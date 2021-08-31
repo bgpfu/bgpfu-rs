@@ -15,13 +15,14 @@ anyhow = "^1.0"
 ipnet = "^2.3"
 irrc = "0.1.0-rc.2"
 itertools = "^0.10"
+lazy_static = "^1.4"
 log = "^0.4"
 num = "^0.4"
 pest = "^2.1"
 pest_derive = "^2.1"
 prefixset = "0.1.0-rc.2"
 stderrlog = "^0.5"
-structopt = "^0.3"
+structopt = {version = "^0.3", features = ["wrap_help"]}
 strum = {version = "^0.21", features = ["derive"]}
 
 [dev-dependencies]

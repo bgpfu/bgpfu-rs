@@ -1,9 +1,13 @@
 use anyhow::Result;
 use irrc::types::AutNum;
 use structopt::{clap::AppSettings, StructOpt};
-use strum::{EnumString, EnumVariantNames, VariantNames};
+use strum::VariantNames;
 
-use crate::{ast::FilterExpr, query::AddressFamilyFilter};
+use crate::{
+    ast::FilterExpr,
+    output::{Format, FORMAT_HELP},
+    query::AddressFamilyFilter,
+};
 
 /// An IRR query and filter generation toolset.
 #[derive(StructOpt, Debug)]
@@ -48,7 +52,7 @@ pub struct Args {
         long,
         possible_values = &AddressFamilyFilter::VARIANTS,
         case_insensitive = true,
-        default_value = "any"
+        default_value,
     )]
     afi: AddressFamilyFilter,
 
@@ -67,13 +71,14 @@ pub struct Args {
     #[structopt(long)]
     peeras: Option<AutNum>,
 
-    /// Output format.
+    /// Output format. See '--help' for details.
     #[structopt(
         short,
         long,
         possible_values = &Format::VARIANTS,
         case_insensitive = true,
-        default_value = "plain"
+        default_value,
+        long_help = &FORMAT_HELP,
     )]
     format: Format,
 
@@ -92,14 +97,14 @@ pub struct Args {
 }
 
 impl Args {
+    /// Construct socket address for IRR client connection.
+    pub fn addr(&self) -> String {
+        format!("{}:{}", self.host, self.port)
+    }
+
     /// Get address family filter.
     pub fn address_family(&self) -> &AddressFamilyFilter {
         &self.afi
-    }
-
-    /// Get `PeerAS` substitution value.
-    pub fn peeras(&self) -> Option<&AutNum> {
-        self.peeras.as_ref()
     }
 
     /// Get parsed filter expression.
@@ -107,9 +112,9 @@ impl Args {
         self.filter.parse()
     }
 
-    /// Calculate logging verbosity.
-    pub fn verbosity(&self) -> usize {
-        1 + self.verbosity_pos - self.verbosity_neg
+    /// Get output format dispatcher.
+    pub fn format(&self) -> &Format {
+        &self.format
     }
 
     /// Get log timestamping option.
@@ -117,14 +122,13 @@ impl Args {
         self.log_timestamp
     }
 
-    /// Construct socket address for IRR client connection.
-    pub fn addr(&self) -> String {
-        format!("{}:{}", self.host, self.port)
+    /// Get `PeerAS` substitution value.
+    pub fn peeras(&self) -> Option<&AutNum> {
+        self.peeras.as_ref()
     }
-}
 
-#[derive(Debug, EnumString, EnumVariantNames)]
-#[strum(serialize_all = "kebab_case")]
-enum Format {
-    Plain,
+    /// Calculate logging verbosity.
+    pub fn verbosity(&self) -> usize {
+        1 + self.verbosity_pos - self.verbosity_neg
+    }
 }
