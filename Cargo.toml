@@ -13,6 +13,7 @@ categories = ["network-programming", "database"]
 [dependencies]
 anyhow = "^1.0"
 clap = "3.0.0-beta.4"
+clap_generate = "3.0.0-beta.4"
 ipnet = "^2.3"
 irrc = "0.1.0-rc.2"
 itertools = "^0.10"
