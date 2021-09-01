@@ -1,6 +1,7 @@
 use std::default::Default;
 use std::fmt::Display;
 use std::mem;
+use std::net::ToSocketAddrs;
 
 use anyhow::Result;
 use irrc::{
@@ -12,7 +13,6 @@ use strum::{AsRefStr, Display, EnumString, EnumVariantNames};
 
 use crate::{
     ast::{Evaluate, FilterExpr, Substitute},
-    cli::Args,
     collect::{Collector, CollectorHandle},
 };
 
@@ -113,10 +113,15 @@ pub struct Resolver<'a> {
 
 impl<'a> Resolver<'a> {
     /// Construct new resolver
-    pub fn new(args: &'a Args) -> Result<Self> {
-        let conn = IrrClient::new(args.addr()).connect()?;
-        let af_filter = args.address_family();
-        let peeras = args.peeras();
+    pub fn new<A>(
+        addr: A,
+        af_filter: &'a AddressFamilyFilter,
+        peeras: Option<&'a AutNum>,
+    ) -> Result<Self>
+    where
+        A: ToSocketAddrs + Display,
+    {
+        let conn = IrrClient::new(addr).connect()?;
         Ok(Self {
             conn,
             af_filter,

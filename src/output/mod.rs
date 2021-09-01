@@ -1,64 +1,54 @@
 use std::io::Write;
 
 use anyhow::Result;
-use lazy_static::lazy_static;
+use clap::Clap;
 use prefixset::{Ipv4Prefix, Ipv6Prefix, PrefixSet};
-use strum::{
-    AsRefStr, Display, EnumIter, EnumMessage, EnumString, EnumVariantNames, IntoEnumIterator,
-};
 
 use crate::query::PrefixSetPair;
 
+mod cisco_ios;
 mod plain;
 
-use self::plain::{Plain, PlainRanges};
+use self::{
+    cisco_ios::CiscoIos,
+    plain::{Plain, PlainRanges},
+};
 
-/// Static dispatch for output formats.
-#[derive(AsRefStr, Debug, Display, EnumIter, EnumMessage, EnumString, EnumVariantNames)]
-#[strum(serialize_all = "kebab_case")]
+#[derive(Clap, Debug)]
+#[clap(subcommand_placeholder("FORMAT", "FORMATS"))]
 pub enum Format {
-    /// Write plain prefixes using [`Display`][std::fmt::Display].
-    #[strum(message = "Plain text list of prefixes.")]
-    Plain,
-    /// Write plain prefix ranges using [`Display`][std::fmt::Display].
-    #[strum(message = "Plain text list of prefix ranges.")]
-    PlainRanges,
+    /// Output plain text list of prefixes.
+    #[clap(short_flag = 'P', long_flag = "plain")]
+    Plain(Plain),
+    /// Output plain text list of prefix ranges.
+    #[clap(short_flag = 'R', long_flag = "plain-ranges")]
+    PlainRanges(PlainRanges),
+    /// Output Cisco IOS Classic/XE ip/ipv6 prefix-lists.
+    #[clap(short_flag = 'C', long_flag = "cisco-ios")]
+    CiscoIos(CiscoIos),
 }
 
 impl Format {
-    /// Write prefix sets using selected [`Formatter`].
-    pub fn write_prefix_sets<W: Write>(&self, sets: &PrefixSetPair, w: &mut W) -> Result<()> {
-        let formatter: Box<dyn Formatter<W>> = match self {
-            Self::Plain => Box::new(Plain::default()),
-            Self::PlainRanges => Box::new(PlainRanges::default()),
-        };
-        formatter.write_prefix_sets(sets, w)
+    fn as_formatter<W: Write>(&self) -> &dyn Formatter<W> {
+        match self {
+            Self::Plain(f) => f,
+            Self::PlainRanges(f) => f,
+            Self::CiscoIos(f) => f,
+        }
     }
 }
 
-impl Default for Format {
-    fn default() -> Self {
-        Self::Plain
+impl<W: Write> Formatter<W> for Format {
+    fn write_prefix_set_ipv4(&self, set: &PrefixSet<Ipv4Prefix>, w: &mut W) -> Result<()> {
+        self.as_formatter().write_prefix_set_ipv4(set, w)
+    }
+
+    fn write_prefix_set_ipv6(&self, set: &PrefixSet<Ipv6Prefix>, w: &mut W) -> Result<()> {
+        self.as_formatter().write_prefix_set_ipv6(set, w)
     }
 }
 
-lazy_static! {
-    /// Auto-generated long help for format options.
-    pub static ref FORMAT_HELP: String = {
-        let mut help = "Output format.\n\nThe following output formats are available:\n" .to_string();
-        help.extend(
-            Format::iter().map(|variant| format!(
-                "  {:16} {}\n",
-                variant,
-                variant.get_message().unwrap()
-            ))
-        );
-        help.push('\n');
-        help
-    };
-}
-
-trait Formatter<W: Write> {
+pub trait Formatter<W: Write> {
     fn write_prefix_set_ipv4(&self, set: &PrefixSet<Ipv4Prefix>, w: &mut W) -> Result<()>;
 
     fn write_prefix_set_ipv6(&self, set: &PrefixSet<Ipv6Prefix>, w: &mut W) -> Result<()>;

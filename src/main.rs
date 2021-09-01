@@ -1,24 +1,21 @@
 use std::io::{self, BufWriter};
 
 use anyhow::Result;
-use structopt::StructOpt;
+use clap::Clap;
 
-use bgpfu::{cli::Args, query::Resolver};
+use bgpfu::{cli::Args, cmd::Dispatch};
 
 fn main() -> Result<()> {
     // parse CLI args
-    let args = Args::from_args();
+    let args = Args::parse();
     // init logger
     stderrlog::new()
         .verbosity(args.verbosity())
         .timestamp(args.log_timestamp())
         .init()?;
-    // parse RPSL filter expression
-    let filter = args.filter()?;
-    // resolve filter expression
-    let sets = Resolver::new(&args)?.resolve(&filter)?;
-    // write output
+    // // Lock stdout
     let stdout = io::stdout();
     let mut writer = BufWriter::new(stdout.lock());
-    args.format().write_prefix_sets(&sets, &mut writer)
+    // dispatch to command
+    args.command().dispatch(&mut writer)
 }

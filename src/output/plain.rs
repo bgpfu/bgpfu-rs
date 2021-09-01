@@ -1,12 +1,13 @@
 use std::io::Write;
 
 use anyhow::Result;
+use clap::Clap;
 use prefixset::{IpPrefix, Ipv4Prefix, Ipv6Prefix, PrefixSet};
 
 use super::Formatter;
 
-#[derive(Default)]
-pub struct Plain();
+#[derive(Clap, Debug, Default)]
+pub struct Plain {}
 
 impl Plain {
     fn write_prefix_set<P, W>(&self, set: &PrefixSet<P>, w: &mut W) -> Result<()>
@@ -29,8 +30,8 @@ impl<W: Write> Formatter<W> for Plain {
     }
 }
 
-#[derive(Default)]
-pub struct PlainRanges();
+#[derive(Clap, Debug, Default)]
+pub struct PlainRanges {}
 
 impl PlainRanges {
     fn write_prefix_set<P, W>(&self, set: &PrefixSet<P>, w: &mut W) -> Result<()>
