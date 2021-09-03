@@ -41,7 +41,10 @@ impl IntoPipeline for AsSet {
             .conn_mut()
             .pipeline_from_initial(Query::AsSetMembersRecursive(self), |result| {
                 result
-                    .map(|item| af_filter.queries(*item.content()))
+                    .map(|item| {
+                        log::trace!("got response item {:?}", item);
+                        af_filter.queries(*item.content())
+                    })
                     .map_err(|err| log::warn!("failed to parse aut-num: {}", err))
                     .ok()
             })
