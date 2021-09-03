@@ -12,6 +12,7 @@ fn main() -> Result<()> {
     stderrlog::new()
         .verbosity(args.verbosity())
         .timestamp(args.log_timestamp())
+        .show_module_names(args.log_module_names())
         .init()?;
     // // Lock stdout
     let stdout = io::stdout();

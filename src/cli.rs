@@ -48,6 +48,10 @@ pub struct Args {
     )]
     log_timestamp: stderrlog::Timestamp,
 
+    /// Show module names in logging output.
+    #[clap(long, global = true)]
+    log_module_names: bool,
+
     #[clap(subcommand)]
     command: Cmd,
 }
@@ -58,9 +62,14 @@ impl Args {
     //     format!("{}:{}", self.host, self.port)
     // }
 
-    /// Get log timestamping option.
+    /// Get log-timestamp option.
     pub fn log_timestamp(&self) -> stderrlog::Timestamp {
         self.log_timestamp
+    }
+
+    /// Get log-module-names option.
+    pub fn log_module_names(&self) -> bool {
+        self.log_module_names
     }
 
     /// Calculate logging verbosity.
