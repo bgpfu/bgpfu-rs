@@ -2,6 +2,7 @@ use std::io::Write;
 
 use anyhow::Result;
 use clap::Clap;
+use irrc::types::AutNum;
 use num::Zero;
 use prefixset::{IpPrefix, Ipv4Prefix, Ipv6Prefix, PrefixSet};
 
@@ -21,19 +22,34 @@ impl IosAfiName for Ipv6Prefix {
 
 #[derive(Clap, Debug, Default)]
 pub struct CiscoIos {
-    // TODO: allow 'PeerAS' substitution in prefix_list_name
     /// prefix-list name.
-    #[clap(short = 'l', long, default_value = "BGP-FU")]
+    ///
+    /// Name of the Cisco IOS ip/ipv6 prefix-lists.
+    ///
+    /// Any occurrences the string `PeerAS` will be substituted for the value
+    /// provided in the `--peeras` option.
+    #[clap(short = 'l', long, default_value = "PeerAS")]
     prefix_list_name: String,
+
+    #[clap(from_global)]
+    peeras: Option<AutNum>,
 }
 
 impl CiscoIos {
+    fn prefix_list_name(&self) -> String {
+        if let Some(peeras) = self.peeras {
+            self.prefix_list_name.replace("PeerAS", &peeras.to_string())
+        } else {
+            self.prefix_list_name.clone()
+        }
+    }
+
     fn write_prefix_set<P, W>(&self, set: &PrefixSet<P>, w: &mut W) -> Result<()>
     where
         P: IpPrefix + IosAfiName,
         W: Write,
     {
-        let name = self.prefix_list_name.as_str();
+        let name = self.prefix_list_name();
         let afi = P::AFI;
         let max_length = P::MAX_LENGTH;
         writeln!(w, "no {} prefix-list {}", afi, name)?;

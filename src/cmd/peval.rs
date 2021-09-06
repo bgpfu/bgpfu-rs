@@ -39,7 +39,7 @@ pub struct Peval {
     /// Get IPv4 and IPv6 routes and more-specifics with `origin: AS65000`,
     /// within the given minimum/maximum prefix length bounds:
     ///
-    /// $ bgpfu --peeras AS65000 'PeerAS^+ AND { 0.0.0.0/0^8-24, ::/0^16-48 }'
+    /// $ bgpfu peval -R --peeras AS65000 'PeerAS^+ AND { 0.0.0.0/0^8-24, ::/0^16-48 }'
     #[clap(long, global = true)]
     peeras: Option<AutNum>,
 
