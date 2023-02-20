@@ -2,6 +2,7 @@
 name = "bgpfu"
 version = "0.1.0-alpha.1"
 edition = "2018"
+resolver = "2"
 authors = ["Ben Maddison <benm@workonline.africa>"]
 description = "A toolset for working with IRR data"
 license = "MIT"
@@ -15,13 +16,13 @@ anyhow = "^1.0"
 clap = "3.0.0-beta.4"
 clap_generate = "3.0.0-beta.4"
 ipnet = "^2.3"
-irrc = "0.1.0-rc.2"
+# irrc = "0.1.0-rc.3"
+irrc = {path = "../irrc-rs"}
 itertools = "^0.10"
 log = "^0.4"
 num = "^0.4"
-pest = "^2.1"
-pest_derive = "^2.1"
 prefixset = "0.1.0-rc.2"
+rpsl = "0.1.0-alpha.1"
 stderrlog = "^0.5"
 strum = {version = "^0.21", features = ["derive"]}
 

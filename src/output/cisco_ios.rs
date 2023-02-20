@@ -2,9 +2,9 @@ use std::io::Write;
 
 use anyhow::Result;
 use clap::Clap;
-use irrc::types::AutNum;
 use num::Zero;
 use prefixset::{IpPrefix, Ipv4Prefix, Ipv6Prefix, PrefixSet};
+use rpsl::names::AutNum;
 
 use super::Formatter;
 

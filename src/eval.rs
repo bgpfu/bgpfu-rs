@@ -1,13 +1,16 @@
+use std::cmp::{max, min};
+
 use anyhow::{anyhow, Result};
 use ipnet::IpNet;
 use itertools::{Either, Itertools};
 use num::One;
 use prefixset::{IpPrefix, IpPrefixRange, Ipv4Prefix, Ipv6Prefix, PrefixSet};
-
-use super::{
-    AsSetExpr, FilterExpr, FilterTerm, LiteralPrefixSetEntry, NamedPrefixSet, PrefixOp,
-    PrefixSetExpr, PrefixSetOp, RouteSetExpr,
+use rpsl::{
+    expr::{FilterExpr, FilterTerm, NamedPrefixSet, PrefixSetExpr},
+    names::{AsSet, RouteSet},
+    primitive::{LiteralPrefixSetEntry, RangeOperator},
 };
+
 use crate::query::{PrefixSetPair, Resolver};
 
 macro_rules! debug_eval {
@@ -69,7 +72,7 @@ impl Evaluate for FilterTerm {
     fn eval(self, resolver: &mut Resolver) -> Result<PrefixSetPair> {
         debug_eval!(FilterTerm);
         match self {
-            Self::Literal(set_expr, op) => Ok(op.apply(set_expr.eval(resolver)?)),
+            Self::Literal(set_expr, op) => Ok(op.apply_set(set_expr.eval(resolver)?)),
             // TODO
             Self::Named(_) => Err(anyhow!("named filter-sets not yet implemented")),
             Self::Expr(expr) => expr.eval(resolver),
@@ -77,8 +80,8 @@ impl Evaluate for FilterTerm {
     }
 }
 
-impl PrefixSetOp {
-    fn apply(&self, pair: PrefixSetPair) -> PrefixSetPair {
+trait PrefixSetOp: PrefixOp {
+    fn apply_set(&self, pair: PrefixSetPair) -> PrefixSetPair {
         let (ipv4, ipv6) = pair;
         (
             ipv4.map(|set| self.apply_map(set)),
@@ -89,23 +92,45 @@ impl PrefixSetOp {
     fn apply_map<P: IpPrefix>(&self, set: PrefixSet<P>) -> PrefixSet<P> {
         set.ranges()
             .filter_map(|range| {
-                self.apply_each(range)
+                self.apply_range(range)
                     .map_err(|err| log::warn!("failed to apply prefix range operator: {}", err))
                     .ok()
             })
             .collect()
     }
+}
 
-    fn apply_each<P: IpPrefix>(
+trait PrefixOp {
+    fn apply<P: IpPrefix>(&self, prefix: P) -> Result<IpPrefixRange<P>, prefixset::Error> {
+        self.apply_range(prefix.into())
+    }
+
+    fn apply_range<P: IpPrefix>(
+        &self,
+        range: IpPrefixRange<P>,
+    ) -> Result<IpPrefixRange<P>, prefixset::Error>;
+}
+
+impl PrefixSetOp for RangeOperator {}
+
+impl PrefixOp for RangeOperator {
+    fn apply_range<P: IpPrefix>(
         &self,
         range: IpPrefixRange<P>,
     ) -> Result<IpPrefixRange<P>, prefixset::Error> {
-        let lower = match self {
+        let (lower, upper) = match self {
             Self::None => return Ok(range),
-            Self::LessExcl => *range.range().start() + 1,
-            Self::LessIncl => *range.range().start(),
+            Self::LessExcl => (*range.range().start() + 1, P::MAX_LENGTH),
+            Self::LessIncl => (*range.range().start(), P::MAX_LENGTH),
+            Self::Exact(length) => (
+                *max(range.range().start(), length),
+                *min(range.range().end(), length),
+            ),
+            Self::Range(upper, lower) => (
+                *max(range.range().start(), lower),
+                *min(range.range().end(), upper),
+            ),
         };
-        let upper = P::MAX_LENGTH;
         IpPrefixRange::new(*range.base(), lower, upper)
     }
 }
@@ -119,7 +144,7 @@ impl Evaluate for PrefixSetExpr {
                     .into_iter()
                     .filter_map(|entry| {
                         entry
-                            .into_prefix_range()
+                            .to_prefix_range()
                             .map_err(|err| {
                                 log::warn!("failed to apply prefix range operator: {}", err)
                             })
@@ -133,27 +158,20 @@ impl Evaluate for PrefixSetExpr {
     }
 }
 
-impl LiteralPrefixSetEntry {
-    fn into_prefix_range(
-        self,
-    ) -> Result<Either<IpPrefixRange<Ipv4Prefix>, IpPrefixRange<Ipv6Prefix>>> {
-        match self.prefix {
-            IpNet::V4(prefix) => Ok(Either::Left(self.op.apply(prefix.into())?)),
-            IpNet::V6(prefix) => Ok(Either::Right(self.op.apply(prefix.into())?)),
-        }
-    }
+trait IntoPrefixRange {
+    fn to_prefix_range(
+        &self,
+    ) -> Result<Either<IpPrefixRange<Ipv4Prefix>, IpPrefixRange<Ipv6Prefix>>>;
 }
 
-impl PrefixOp {
-    fn apply<P: IpPrefix>(&self, prefix: P) -> Result<IpPrefixRange<P>, prefixset::Error> {
-        let (lower, upper) = match self {
-            Self::None => (prefix.length(), prefix.length()),
-            Self::LessExcl => (prefix.length() + 1, P::MAX_LENGTH),
-            Self::LessIncl => (prefix.length(), P::MAX_LENGTH),
-            Self::Exact(length) => (*length, *length),
-            Self::Range(upper, lower) => (*upper, *lower),
-        };
-        IpPrefixRange::new(prefix, lower, upper)
+impl IntoPrefixRange for LiteralPrefixSetEntry {
+    fn to_prefix_range(
+        &self,
+    ) -> Result<Either<IpPrefixRange<Ipv4Prefix>, IpPrefixRange<Ipv6Prefix>>> {
+        match self.prefix() {
+            IpNet::V4(prefix) => Ok(Either::Left(self.operator().apply((*prefix).into())?)),
+            IpNet::V6(prefix) => Ok(Either::Right(self.operator().apply((*prefix).into())?)),
+        }
     }
 }
 
@@ -165,35 +183,23 @@ impl Evaluate for NamedPrefixSet {
             Self::PeerAs => Err(anyhow!(
                 "expected named prefix set, found un-substituted 'PeerAS' token"
             )),
-            Self::RouteSet(route_set_expr) => route_set_expr.eval(resolver),
-            Self::AsSet(as_set_expr) => as_set_expr.eval(resolver),
+            Self::RouteSet(route_set) => route_set.eval(resolver),
+            Self::AsSet(as_set) => as_set.eval(resolver),
             Self::AutNum(autnum) => resolver.job(autnum),
         }
     }
 }
 
-impl Evaluate for RouteSetExpr {
+impl Evaluate for RouteSet {
     fn eval(self, resolver: &mut Resolver) -> Result<PrefixSetPair> {
-        debug_eval!(RouteSetExpr);
-        match self {
-            Self::Ready(route_set) => resolver.job(route_set),
-            Self::Pending(comps) => Err(anyhow!(
-                "expected route-set, found pending route-set name components: {:?}",
-                comps
-            )),
-        }
+        debug_eval!(RouteSet);
+        resolver.job(self)
     }
 }
 
-impl Evaluate for AsSetExpr {
+impl Evaluate for AsSet {
     fn eval(self, resolver: &mut Resolver) -> Result<PrefixSetPair> {
-        debug_eval!(AsSetExpr);
-        match self {
-            Self::Ready(as_set) => resolver.job(as_set),
-            Self::Pending(comps) => Err(anyhow!(
-                "expected as-set, found pending as-set name components: {:?}",
-                comps
-            )),
-        }
+        debug_eval!(AsSet);
+        resolver.job(self)
     }
 }

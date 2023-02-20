@@ -4,16 +4,18 @@ use std::mem;
 use std::net::ToSocketAddrs;
 
 use anyhow::Result;
-use irrc::{
-    types::{AsSet, AutNum, RouteSet},
-    Connection, IrrClient, Pipeline, Query, QueryResult,
-};
+use irrc::{Connection, IrrClient, Pipeline, Query, QueryResult};
 use prefixset::{Ipv4Prefix, Ipv6Prefix, PrefixSet};
+use rpsl::{
+    expr::FilterExpr,
+    names::{AsSet, AutNum, RouteSet},
+    subst::{PeerAs, Substitute},
+};
 use strum::{AsRefStr, Display, EnumString, EnumVariantNames};
 
 use crate::{
-    ast::{Evaluate, FilterExpr, Substitute},
     collect::{Collector, CollectorHandle},
+    eval::Evaluate,
 };
 
 /// Alias for the return type of [`Resolver::resolve`].
@@ -142,11 +144,6 @@ impl<'a> Resolver<'a> {
         self.af_filter
     }
 
-    /// Get a ref to the `PeerAS` substitution [`AutNum`].
-    pub fn peeras(&self) -> Option<&AutNum> {
-        self.peeras
-    }
-
     /// Filter a pair of [`PrefixSet`]s.
     pub fn filter_pair(
         &self,
@@ -179,6 +176,12 @@ impl<'a> Resolver<'a> {
     {
         log::info!("trying to resolve object '{}'", object);
         Job::spawn(self, object)?.join()
+    }
+}
+
+impl PeerAs for Resolver<'_> {
+    fn peeras(&self) -> Option<&AutNum> {
+        self.peeras
     }
 }
 

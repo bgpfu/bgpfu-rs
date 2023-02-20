@@ -2,11 +2,10 @@ use std::io::Write;
 
 use anyhow::Result;
 use clap::Clap;
-use irrc::types::AutNum;
+use rpsl::{expr::FilterExpr, names::AutNum};
 use strum::VariantNames;
 
 use crate::{
-    ast::FilterExpr,
     output::{Format, Formatter},
     query::{AddressFamilyFilter, Resolver},
 };
@@ -64,7 +63,7 @@ pub struct Peval {
 impl Peval {
     /// Get parsed filter expression.
     pub fn filter(&self) -> Result<FilterExpr> {
-        self.filter.parse()
+        Ok(self.filter.parse()?)
     }
 }
 

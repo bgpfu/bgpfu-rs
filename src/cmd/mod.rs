@@ -5,8 +5,9 @@ use clap::Clap;
 
 mod completion;
 mod peval;
+mod whois;
 
-use self::{completion::Completion, peval::Peval};
+use self::{completion::Completion, peval::Peval, whois::Whois};
 
 /// Dispatch behaviour for `bgpfu` subcommands.
 pub trait Dispatch<W: Write> {
@@ -19,9 +20,10 @@ pub trait Dispatch<W: Write> {
 pub enum Cmd {
     /// Evaluate an RPSL filter expression.
     Peval(Peval),
-
     /// Print shell completion script.
     Completion(Completion),
+    /// Find and print an RPSL object with the given name.
+    Whois(Whois),
 }
 
 impl<W: Write> Dispatch<W> for Cmd {
@@ -29,6 +31,7 @@ impl<W: Write> Dispatch<W> for Cmd {
         match self {
             Self::Peval(peval) => peval.dispatch(w),
             Self::Completion(completion) => completion.dispatch(w),
+            Self::Whois(whois) => whois.dispatch(w),
         }
     }
 }
