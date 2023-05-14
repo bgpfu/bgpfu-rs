@@ -1,71 +1,59 @@
-use structopt::StructOpt;
-use strum::{EnumString, EnumVariantNames, VariantNames};
+use clap::{Parser, ValueEnum};
 
-use crate::{ast::FilterExpr, query::AddressFamilyFilter};
+use rpsl::expr::MpFilterExpr;
 
 /// An IRR query and filter generation toolset.
-#[derive(StructOpt, Debug)]
-#[structopt(rename_all = "kebab_case")]
+#[derive(Debug, Parser)]
+#[command(author, version, about, long_about = None)]
 pub struct Args {
     /// IRRd server hostname or IP address.
-    #[structopt(short = "H", long, default_value = "whois.radb.net")]
+    #[arg(short = 'H', long, default_value = "whois.radb.net")]
     host: String,
 
     /// IRRd server port.
-    #[structopt(short = "P", long, default_value = "43")]
+    #[arg(short = 'P', long, default_value_t = 43)]
     port: u16,
 
     /// Set the logging level.
-    #[structopt(short, long, default_value = "warn")]
+    #[arg(short, long, default_value_t = log::LevelFilter::Warn)]
     log_level: log::LevelFilter,
 
-    /// Filter output by address family.
-    #[structopt(
-        long,
-        possible_values = &AddressFamilyFilter::VARIANTS,
-        case_insensitive = true,
-        default_value = "any"
-    )]
-    afi: AddressFamilyFilter,
-
     /// Output format.
-    #[structopt(
-        short,
-        long,
-        possible_values = &Format::VARIANTS,
-        case_insensitive = true,
-        default_value = "plain"
-    )]
+    #[arg(short, long, value_enum, default_value = "plain")]
     format: Format,
 
-    /// RPSL filter expression to evaluate.
-    filter: FilterExpr,
+    /// RPSL mp-filter expression to evaluate.
+    filter: MpFilterExpr,
 }
 
 impl Args {
-    /// Get address family filter.
-    pub fn address_family(&self) -> &AddressFamilyFilter {
-        &self.afi
+    /// Get the IRRd server hostname.
+    #[must_use]
+    pub fn host(&self) -> &str {
+        &self.host
+    }
+
+    /// Get the IRRd server port number.
+    #[must_use]
+    pub const fn port(&self) -> u16 {
+        self.port
     }
 
     /// Get object to query.
-    pub fn filter(&self) -> FilterExpr {
-        self.filter.clone()
+    #[allow(clippy::missing_const_for_fn)]
+    #[must_use]
+    pub fn filter(self) -> MpFilterExpr {
+        self.filter
     }
 
     /// Get log level.
-    pub fn log_level(&self) -> &log::LevelFilter {
-        &self.log_level
-    }
-
-    /// Construct socket address for IRR client connection.
-    pub fn addr(&self) -> String {
-        format!("{}:{}", self.host, self.port)
+    #[must_use]
+    pub const fn log_level(&self) -> log::LevelFilter {
+        self.log_level
     }
 }
 
-#[derive(Debug, EnumString, EnumVariantNames)]
-#[strum(serialize_all = "kebab_case")]
+#[derive(Copy, Clone, Debug, ValueEnum)]
 enum Format {
     Plain,
 }

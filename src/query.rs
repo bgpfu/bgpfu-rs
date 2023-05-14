@@ -1,227 +1,221 @@
-use std::mem;
+use ip::{Any, Prefix, PrefixSet};
 
-use anyhow::Result;
-use irrc::{
-    types::{AsSet, AutNum, RouteSet},
-    Connection, IrrClient, Pipeline, Query, QueryResult,
+use irrc::{Connection, IrrClient, Query, ResponseItem};
+
+use rpsl::{
+    attr::RpslAttribute,
+    expr::{
+        eval::{Evaluate, Evaluator, Resolver},
+        MpFilterExpr,
+    },
+    names::{AsSet, AutNum, FilterSet, RouteSet},
+    obj::{RpslObject, RpslObjectClass},
+    primitive::PeerAs,
 };
-use prefixset::{Ipv4Prefix, Ipv6Prefix, PrefixSet};
-use strum::{EnumString, EnumVariantNames};
 
-use crate::{
-    ast::{Evaluate, FilterExpr},
-    cli::Args,
-    collect::{Collector, CollectorHandle},
-};
+use crate::error::Error;
 
-/// Alias for the return type of [`Resolver::resolve`].
-pub type PrefixSetPair = (Option<PrefixSet<Ipv4Prefix>>, Option<PrefixSet<Ipv6Prefix>>);
-
-/// An object that can be transformed into a [`Pipeline`].
-pub trait IntoPipeline {
-    /// Transform into a [`Pipeline`] using a [`Resolver`].
-    fn into_pipeline<'a>(self, resolver: &'a mut Resolver) -> QueryResult<Pipeline<'a>>;
+/// An implementation of [`rpsl::expr::eval::Evaluator`] that resolves RPSL names using the IRRd
+/// query protocol.
+///
+/// # Examples
+///
+/// ``` no_run
+/// use bgpfu::query::RpslEvaluator;
+/// use ip::traits::PrefixSet;
+/// use rpsl::expr::MpFilterExpr;
+///
+/// let filter: MpFilterExpr = "AS-FOO AND { 0.0.0.0/0^8-24, ::/0^16-48 }".parse()?;
+/// Evaluator::new("whois.radb.net", 43)?
+///     .evaluate(filter)?
+///     .ranges()
+///     .for_each(|range| println!("{range}"));
+/// # Ok::<_, Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Debug)]
+pub struct RpslEvaluator {
+    conn: Option<Connection>,
 }
 
-impl IntoPipeline for AutNum {
-    fn into_pipeline<'a>(self, resolver: &'a mut Resolver) -> QueryResult<Pipeline<'a>> {
-        let queries = resolver.af_filter().queries(self);
-        let mut pipeline = resolver.conn_mut().pipeline();
-        pipeline.extend(queries);
-        Ok(pipeline)
-    }
-}
-
-impl IntoPipeline for AsSet {
-    fn into_pipeline<'a>(self, resolver: &'a mut Resolver) -> QueryResult<Pipeline<'a>> {
-        let af_filter = resolver.af_filter().to_owned();
-        resolver
-            .conn_mut()
-            .pipeline_from_initial(Query::AsSetMembersRecursive(self), |result| {
-                result
-                    .map(|item| af_filter.queries(*item.content()))
-                    .map_err(|err| log::warn!("failed to parse aut-num: {}", err))
-                    .ok()
-            })
-    }
-}
-
-impl IntoPipeline for RouteSet {
-    fn into_pipeline<'a>(self, resolver: &'a mut Resolver) -> QueryResult<Pipeline<'a>> {
-        let mut pipeline = resolver.conn_mut().pipeline();
-        pipeline.push(Query::RouteSetMembersRecursive(self))?;
-        Ok(pipeline)
-    }
-}
-
-/// Query filter by address family.
-#[derive(Copy, Clone, Debug, EnumString, EnumVariantNames)]
-#[strum(serialize_all = "kebab_case")]
-pub enum AddressFamilyFilter {
-    /// Query both IPv4 and IPv6 prefixes.
-    Any,
-    /// Query only IPv4 prefixes.
-    Ipv4,
-    /// Query only IPv6 prefixes.
-    Ipv6,
-}
-
-impl AddressFamilyFilter {
-    /// Are IPv4 prefixes included in the filter?
-    pub fn with_ipv4(&self) -> bool {
-        matches!(self, Self::Ipv4 | Self::Any)
+impl RpslEvaluator {
+    /// Construct a new [`Evaluator`].
+    ///
+    /// # Errors
+    ///
+    /// An [`Error::Io`] is returned if the connection to the IRRd server cannot be established.
+    pub fn new(host: &str, port: u16) -> Result<Self, Error> {
+        let addr = format!("{host}:{port}");
+        let conn = IrrClient::new(addr).connect()?;
+        Ok(Self { conn: Some(conn) })
     }
 
-    /// Are IPv6 prefixes included in the filter?
-    pub fn with_ipv6(&self) -> bool {
-        matches!(self, Self::Ipv6 | Self::Any)
-    }
-
-    /// Construct IRR queries for searching for `route(6)` objects by `origin`.
-    pub fn queries(&self, autnum: AutNum) -> impl Iterator<Item = Query> {
-        vec![
-            if self.with_ipv4() {
-                Some(Query::Ipv4Routes(autnum))
-            } else {
-                None
-            },
-            if self.with_ipv6() {
-                Some(Query::Ipv6Routes(autnum))
-            } else {
-                None
-            },
-        ]
-        .into_iter()
-        .flatten()
-    }
-}
-
-/// Thread based prefix set query resolver.
-pub struct Resolver<'a> {
-    conn: Connection,
-    af_filter: &'a AddressFamilyFilter,
-}
-
-impl<'a> Resolver<'a> {
-    /// Construct new resolver
-    pub fn new(args: &'a Args) -> Result<Self> {
-        let conn = IrrClient::new(args.addr()).connect()?;
-        let af_filter = args.address_family();
-        Ok(Self { conn, af_filter })
-    }
-
-    /// Get a mutable ref to the underlying [`Connection`].
-    fn conn_mut(&mut self) -> &mut Connection {
-        &mut self.conn
-    }
-
-    /// Get a ref to the [`AddressFamilyFilter`].
-    fn af_filter(&self) -> &AddressFamilyFilter {
-        self.af_filter
-    }
-
-    /// Filter a pair of [`PrefixSet`]s.
-    pub fn filter_pair(
-        &self,
-        sets: (PrefixSet<Ipv4Prefix>, PrefixSet<Ipv6Prefix>),
-    ) -> PrefixSetPair {
-        let (ipv4, ipv6) = sets;
-        (
-            if self.af_filter().with_ipv4() {
-                Some(ipv4)
-            } else {
-                None
-            },
-            if self.af_filter().with_ipv6() {
-                Some(ipv6)
-            } else {
-                None
-            },
-        )
-    }
-
-    /// Resolve a [`FilterExpr`] into a [`PrefixSet`].
-    pub fn resolve(&mut self, filter: FilterExpr) -> Result<PrefixSetPair> {
-        filter.eval(self)
-    }
-
-    /// Spawn a resolution [`Job`].
-    pub fn job<T>(&mut self, object: T) -> Result<PrefixSetPair>
+    fn with_connection<F, T, E>(&mut self, f: F) -> Result<T, Error>
     where
-        T: IntoPipeline,
+        F: Fn(&mut Self, &mut Connection) -> Result<T, E>,
+        E: Into<Error>,
     {
-        Job::spawn(self, object)?.join()
+        let mut conn = self
+            .conn
+            .take()
+            .ok_or("failed to take ownership of connection")?;
+        let result = f(self, &mut conn).map_err(Into::into);
+        self.conn = Some(conn);
+        result
+    }
+
+    /// Evaluate an RPSL expression.
+    ///
+    /// This method wraps [`Evaluator::evaluate`], and is provided as a convenience so that the
+    /// underlying trait does not have to be brought into scope explicitly.
+    ///
+    /// # Errors
+    ///
+    /// See [`Evaluator`] for error handling details.
+    pub fn evaluate<'a, T>(
+        &mut self,
+        expr: T,
+    ) -> Result<<Self as Evaluator<'a>>::Output<T>, <Self as Evaluator<'a>>::Error>
+    where
+        T: Evaluate<'a, Self>,
+    {
+        <Self as Evaluator>::evaluate(self, expr)
     }
 }
 
-/// A query resolution job using a [`Resolver`].
-pub struct Job<'a, 'b>
-where
-    'a: 'b,
-{
-    #[allow(dead_code)]
-    resolver: &'b mut Resolver<'a>,
-    ipv4_collector_handle: Option<Box<CollectorHandle<Ipv4Prefix>>>,
-    ipv6_collector_handle: Option<Box<CollectorHandle<Ipv6Prefix>>>,
+impl<'a> Evaluator<'a> for RpslEvaluator {
+    type Output<T> = <T as Evaluate<'a, Self>>::Output
+    where
+        T: Evaluate<'a, Self>;
+
+    type Error = Error;
+
+    fn finalise<T>(&mut self, output: T::Output) -> Result<Self::Output<T>, Self::Error>
+    where
+        T: Evaluate<'a, Self>,
+    {
+        Ok(output)
+    }
+
+    fn sink_error(&mut self, err: &(dyn std::error::Error + Send + Sync + 'static)) -> bool {
+        log::warn!("{err}");
+        true
+    }
 }
 
-impl<'a, 'b> Job<'a, 'b>
-where
-    'a: 'b,
-{
-    /// Spawn query and collection threads.
-    pub fn spawn<T>(resolver: &'b mut Resolver<'a>, object: T) -> Result<Self>
-    where
-        T: IntoPipeline,
-    {
-        let (ipv4_collector_tx, ipv4_collector_handle) = if resolver.af_filter().with_ipv4() {
-            Collector::<Ipv4Prefix>::spawn().split_option()
-        } else {
-            (None, None)
-        };
-        let (ipv6_collector_tx, ipv6_collector_handle) = if resolver.af_filter().with_ipv6() {
-            Collector::<Ipv6Prefix>::spawn().split_option()
-        } else {
-            (None, None)
-        };
-        object
-            .into_pipeline(resolver)?
-            .responses()
-            .filter_map(|item| {
-                item.map_err(|err| log::warn!("failed to parse prefix: {}", err))
-                    .ok()
-            })
-            .for_each(|item| match item.query() {
-                Query::Ipv4Routes(_) | Query::RouteSetMembersRecursive(_) => {
-                    if let Some(ref tx) = ipv4_collector_tx {
-                        tx.collect(item);
-                    } else {
-                        log::error!("unexpected IPv4 response item received: {:?}", item);
-                    }
-                }
-                Query::Ipv6Routes(_) => {
-                    if let Some(ref tx) = ipv6_collector_tx {
-                        tx.collect(item);
-                    } else {
-                        log::error!("unexpected IPv6 response item received: {:?}", item);
-                    }
-                }
-                _ => unreachable!(),
-            });
-        mem::drop(ipv4_collector_tx);
-        mem::drop(ipv6_collector_tx);
-        Ok(Self {
-            resolver,
-            ipv4_collector_handle,
-            ipv6_collector_handle,
+impl Resolver<'_, FilterSet, MpFilterExpr> for RpslEvaluator {
+    type IError = Error;
+
+    fn resolve(&mut self, filter_set: &FilterSet) -> Result<MpFilterExpr, Self::IError> {
+        self.with_connection(|this, conn| {
+            conn.pipeline()
+                // TODO: this is a bad API - we should be able to determine the required object
+                // class from the type of `filter_set`.
+                .push(Query::RpslObject(
+                    irrc::RpslObjectClass::FilterSet,
+                    filter_set.to_string(),
+                ))
+                .map_err(Error::from)
+                .and_then(|pipeline| {
+                    pipeline
+                        .responses()
+                        .find_map(|resp| {
+                            this.collect_result(resp.map_err(Error::from).and_then(|item| {
+                                if let RpslObject::FilterSet(obj) = item.into_content() {
+                                    obj.attrs()
+                                        .into_iter()
+                                        .find_map(|attr| {
+                                            if let RpslAttribute::MpFilter(expr) = attr {
+                                                // TODO: shouldn't need to clone here either!
+                                                Some(expr.clone())
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                        .ok_or_else(|| Error::from("no mp-filter attribute found"))
+                                } else {
+                                    Err(Error::from("unexpected rpsl object"))
+                                }
+                            }))
+                            .transpose()
+                        })
+                        .unwrap_or_else(|| Ok("NOT ANY".parse()?))
+                })
         })
     }
+}
 
-    /// Join all threads, and return results.
-    pub fn join(self) -> Result<PrefixSetPair> {
-        Ok((
-            self.ipv4_collector_handle.map(|handle| handle.join()),
-            self.ipv6_collector_handle.map(|handle| handle.join()),
-        ))
+impl Resolver<'_, AsSet, PrefixSet<Any>> for RpslEvaluator {
+    type IError = Error;
+
+    fn resolve(&mut self, as_set: &AsSet) -> Result<PrefixSet<Any>, Self::IError> {
+        self.with_connection(|this, conn| {
+            // TODO: shouldn't need to clone here
+            conn.pipeline_from_initial(Query::AsSetMembersRecursive(as_set.clone()), |resp| {
+                this.collect_result::<_, _, Error>(resp.map(|item| {
+                    let autnum = item.into_content();
+                    [Query::Ipv4Routes(autnum), Query::Ipv6Routes(autnum)]
+                }))
+                // TODO: we want a way of providing our own error handling closure
+                .unwrap_or_else(|err| {
+                    _ = this.sink_error(&err);
+                    None
+                })
+            })
+            .and_then(|mut pipeline| {
+                this.collect_results(
+                    pipeline
+                        .responses::<'_, Prefix<Any>>()
+                        .map(|resp| resp.map(ResponseItem::into_content)),
+                )
+            })
+        })
+    }
+}
+
+impl Resolver<'_, RouteSet, PrefixSet<Any>> for RpslEvaluator {
+    type IError = Error;
+
+    fn resolve(&mut self, route_set: &RouteSet) -> Result<PrefixSet<Any>, Self::IError> {
+        self.with_connection(|this, conn| {
+            conn.pipeline()
+                // TODO: shouldn't need to clone here
+                .push(Query::RouteSetMembersRecursive(route_set.clone()))
+                .map_err(Error::from)
+                .and_then(|pipeline| {
+                    this.collect_results(
+                        pipeline
+                            .responses::<'_, Prefix<Any>>()
+                            .map(|response| response.map(ResponseItem::into_content)),
+                    )
+                })
+        })
+    }
+}
+
+impl Resolver<'_, AutNum, PrefixSet<Any>> for RpslEvaluator {
+    type IError = Error;
+
+    fn resolve(&mut self, autnum: &AutNum) -> Result<PrefixSet<Any>, Self::IError> {
+        self.with_connection(|this, conn| {
+            conn.pipeline()
+                .push(Query::Ipv4Routes(*autnum))?
+                .push(Query::Ipv6Routes(*autnum))
+                .map_err(Error::from)
+                .and_then(|pipeline| {
+                    this.collect_results(
+                        pipeline
+                            .responses::<'_, Prefix<Any>>()
+                            .map(|response| response.map(ResponseItem::into_content)),
+                    )
+                })
+        })
+    }
+}
+
+impl Resolver<'_, PeerAs, PrefixSet<Any>> for RpslEvaluator {
+    type IError = Error;
+
+    fn resolve(&mut self, _: &PeerAs) -> Result<PrefixSet<Any>, Self::IError> {
+        unimplemented!()
     }
 }
