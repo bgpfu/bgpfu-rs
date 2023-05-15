@@ -20,7 +20,7 @@ clap = {version = "^4.0", features = ["derive"]}
 clap-verbosity-flag = "2.0"
 generic-ip = "0.1.0-rc.2"
 rpsl = "0.1.0-rc.1"
-simple_logger = {version = "^1.13", features = ["stderr"]}
+simple_logger = {version = "^4.1", features = ["stderr"]}
 
 [dev-dependencies]
 version-sync = "^0.9"
