@@ -1,5 +1,5 @@
-//! Support library for `bgpfu`.
-#![doc(html_root_url = "https://docs.rs/bgpfu/0.1.0-alpha.1")]
+//! Support library for `bgpfu-cli`.
+#![doc(html_root_url = "https://docs.rs/bgpfu-cli/0.1.0-alpha.1")]
 // clippy lints
 #![warn(clippy::pedantic)]
 #![warn(clippy::cargo)]
@@ -49,9 +49,8 @@ mod deps {
     use version_sync as _;
 }
 
-/// Command line argument handling
-pub mod cli;
-/// Error types
-pub mod error;
-/// Query pipelining and response handling.
-pub mod query;
+mod cli;
+pub use self::cli::main;
+
+mod format;
+pub(crate) use self::format::Format;

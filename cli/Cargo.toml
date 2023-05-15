@@ -1,0 +1,26 @@
+[package]
+name = "bgpfu-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[[bin]]
+name = "bgpfu"
+
+[dependencies]
+anyhow = "^1.0"
+bgpfu-lib = {path = "../lib"}
+clap = {version = "^4.0", features = ["derive"]}
+generic-ip = "0.1.0-rc.2"
+log = "^0.4"
+rpsl = "0.1.0-rc.1"
+simple_logger = {version = "^1.13", features = ["stderr"]}
+
+[dev-dependencies]
+version-sync = "^0.9"

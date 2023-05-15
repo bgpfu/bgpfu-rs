@@ -26,7 +26,7 @@ use crate::error::Error;
 /// use rpsl::expr::MpFilterExpr;
 ///
 /// let filter: MpFilterExpr = "AS-FOO AND { 0.0.0.0/0^8-24, ::/0^16-48 }".parse()?;
-/// Evaluator::new("whois.radb.net", 43)?
+/// RpslEvaluator::new("whois.radb.net", 43)?
 ///     .evaluate(filter)?
 ///     .ranges()
 ///     .for_each(|range| println!("{range}"));
