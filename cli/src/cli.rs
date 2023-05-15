@@ -2,6 +2,8 @@ use bgpfu::query::RpslEvaluator;
 
 use clap::Parser;
 
+use clap_verbosity_flag::Verbosity;
+
 use ip::traits::PrefixSet as _;
 
 use rpsl::expr::MpFilterExpr;
@@ -10,11 +12,13 @@ use simple_logger::SimpleLogger;
 
 use crate::Format;
 
-/// Entrypoint function for the `bgpfu` CLI tool.
+/// Entry-point function for the `bgpfu` CLI tool.
 #[allow(clippy::missing_errors_doc)]
 pub fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
-    SimpleLogger::new().with_level(args.log_level()).init()?;
+    SimpleLogger::new()
+        .with_level(args.verbosity.log_level_filter())
+        .init()?;
     RpslEvaluator::new(args.host(), args.port())?
         .evaluate(args.filter())?
         .ranges()
@@ -34,12 +38,11 @@ struct Cli {
     #[arg(short = 'P', long, default_value_t = 43)]
     port: u16,
 
-    /// Set the logging level.
-    #[arg(short, long, default_value_t = log::LevelFilter::Warn)]
-    log_level: log::LevelFilter,
+    #[command(flatten)]
+    verbosity: Verbosity,
 
     /// Output format.
-    #[arg(short, long, value_enum, default_value = "plain")]
+    #[arg(short, long, value_enum, default_value_t = Format::Plain)]
     format: Format,
 
     /// RPSL mp-filter expression to evaluate.
@@ -64,11 +67,5 @@ impl Cli {
     #[must_use]
     fn filter(self) -> MpFilterExpr {
         self.filter
-    }
-
-    /// Get log level.
-    #[must_use]
-    const fn log_level(&self) -> log::LevelFilter {
-        self.log_level
     }
 }

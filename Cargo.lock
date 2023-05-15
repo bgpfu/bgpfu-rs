@@ -81,6 +81,7 @@ dependencies = [
  "anyhow",
  "bgpfu-lib",
  "clap",
+ "clap-verbosity-flag",
  "generic-ip",
  "log",
  "rpsl",
@@ -154,6 +155,16 @@ dependencies = [
  "clap_builder",
  "clap_derive",
  "once_cell",
+]
+
+[[package]]
+name = "clap-verbosity-flag"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1eef05769009513df2eb1c3b4613e7fad873a14c600ff025b08f250f59fee7de"
+dependencies = [
+ "clap",
+ "log",
 ]
 
 [[package]]
