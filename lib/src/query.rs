@@ -42,7 +42,7 @@ impl RpslEvaluator {
     ///
     /// # Errors
     ///
-    /// An [`Error::Io`] is returned if the connection to the IRRd server cannot be established.
+    /// An [`Error::Irr`] is returned if the connection to the IRRd server cannot be established.
     pub fn new(host: &str, port: u16) -> Result<Self, Error> {
         let addr = format!("{host}:{port}");
         let conn = IrrClient::new(addr).connect()?;
