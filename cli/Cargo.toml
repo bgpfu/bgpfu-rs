@@ -14,13 +14,13 @@ categories.workspace = true
 name = "bgpfu"
 
 [dependencies]
-anyhow = "^1.0"
-bgpfu-lib = {path = "../lib"}
-clap = {version = "^4.0", features = ["derive"]}
-clap-verbosity-flag = "2.0"
-generic-ip = "0.1.0-rc.2"
-rpsl = "0.1.0-rc.1"
-simple_logger = {version = "^1.13", features = ["stderr"]}
+anyhow.workspace = true
+bgpfu-lib.workspace = true
+clap.workspace = true
+clap-verbosity-flag.workspace = true
+generic-ip.workspace = true
+rpsl.workspace = true
+simple_logger.workspace = true
 
 [dev-dependencies]
-version-sync = "^0.9"
+version-sync.workspace = true

@@ -11,3 +11,18 @@ repository = "https://github.com/bgpfu/bgpfu-rs"
 readme = "README.md"
 keywords = ["irr", "rpsl", "bgp"]
 categories = ["network-programming", "database"]
+
+[workspace.dependencies]
+# internal
+bgpfu-lib = {path = "./lib", version = "0.1.0-alpha.2"}
+# external
+anyhow = "^1.0"
+clap = {version = "^4.0", features = ["derive"]}
+clap-verbosity-flag = "2.0"
+generic-ip = "0.1.0-rc.2"
+irrc = "0.1.0-rc.5"
+log = "^0.4"
+rpsl = "0.1.0-rc.1"
+simple_logger = {version = "^1.13", features = ["stderr"]}
+thiserror = "^1.0"
+version-sync = "^0.9"

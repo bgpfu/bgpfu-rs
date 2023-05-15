@@ -14,11 +14,11 @@ categories.workspace = true
 name = "bgpfu"
 
 [dependencies]
-irrc = "0.1.0-rc.5"
-generic-ip = "0.1.0-rc.2"
-log = "^0.4"
-rpsl = "0.1.0-rc.1"
-thiserror = "^1.0"
+generic-ip.workspace = true
+irrc.workspace = true
+log.workspace = true
+rpsl.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
-version-sync = "^0.9"
+version-sync.workspace = true
