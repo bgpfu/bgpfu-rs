@@ -43,13 +43,16 @@
 // docs.rs build config
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
+/// Error types
+mod error;
+pub use self::error::Error;
+
+/// Query pipelining and response handling.
+mod query;
+pub use self::query::RpslEvaluator;
+
 // silence unused dev-dependency warnings
 #[cfg(test)]
 mod deps {
     use version_sync as _;
 }
-
-/// Error types
-pub mod error;
-/// Query pipelining and response handling.
-pub mod query;

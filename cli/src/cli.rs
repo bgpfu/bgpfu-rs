@@ -1,4 +1,4 @@
-use bgpfu::query::RpslEvaluator;
+use bgpfu::RpslEvaluator;
 
 use clap::Parser;
 

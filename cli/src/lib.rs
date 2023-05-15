@@ -43,14 +43,14 @@
 // docs.rs build config
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
-// silence unused dev-dependency warnings
-#[cfg(test)]
-mod deps {
-    use version_sync as _;
-}
-
 mod cli;
 pub use self::cli::main;
 
 mod format;
 pub(crate) use self::format::Format;
+
+// silence unused dev-dependency warnings
+#[cfg(test)]
+mod deps {
+    use version_sync as _;
+}
