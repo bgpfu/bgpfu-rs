@@ -2,7 +2,7 @@
 members = ["lib", "cli"]
 
 [workspace.package]
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 edition = "2021"
 authors = ["Ben Maddison <benm@workonline.africa>"]
 description = "A toolset for working with IRR data"
