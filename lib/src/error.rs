@@ -1,4 +1,4 @@
-use rpsl::{error::ParseError, expr::eval::EvaluationError};
+use rpsl::{attr::AttributeType, error::ParseError, expr::eval::EvaluationError, obj::RpslObject};
 
 /// Error condition variants.
 #[derive(Debug, thiserror::Error)]
@@ -12,12 +12,13 @@ pub enum Error {
     /// RPSL parsing errors.
     #[error(transparent)]
     Parse(#[from] ParseError),
-    #[error("{0}")]
-    General(String),
-}
-
-impl From<&str> for Error {
-    fn from(value: &str) -> Self {
-        Self::General(value.to_string())
-    }
+    /// The connection to the IRRd server couldn't be acquired.
+    #[error("failed to acquire the connection to the IRRd server")]
+    AcquireConnection,
+    /// The required attribute was not found in the RPSL object.
+    #[error("no {0} attribute found in RPSL object {1}")]
+    FindAttribute(AttributeType, RpslObject),
+    /// An unexpected RPSL object type was received.
+    #[error("unexpected RPSL object {0}")]
+    RpslObjectClass(RpslObject),
 }

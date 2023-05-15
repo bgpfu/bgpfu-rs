@@ -3,7 +3,7 @@ use ip::{Any, Prefix, PrefixSet};
 use irrc::{Connection, IrrClient, Query, ResponseItem};
 
 use rpsl::{
-    attr::RpslAttribute,
+    attr::{AttributeType, RpslAttribute},
     expr::{
         eval::{Evaluate, Evaluator, Resolver},
         MpFilterExpr,
@@ -54,10 +54,7 @@ impl RpslEvaluator {
         F: Fn(&mut Self, &mut Connection) -> Result<T, E>,
         E: Into<Error>,
     {
-        let mut conn = self
-            .conn
-            .take()
-            .ok_or("failed to take ownership of connection")?;
+        let mut conn = self.conn.take().ok_or(Error::AcquireConnection)?;
         let result = f(self, &mut conn).map_err(Into::into);
         self.conn = Some(conn);
         result
@@ -120,8 +117,10 @@ impl Resolver<'_, FilterSet, MpFilterExpr> for RpslEvaluator {
                         .responses()
                         .find_map(|resp| {
                             this.collect_result(resp.map_err(Error::from).and_then(|item| {
-                                if let RpslObject::FilterSet(obj) = item.into_content() {
-                                    obj.attrs()
+                                let obj = item.into_content();
+                                if let RpslObject::FilterSet(ref filter_set_obj) = obj {
+                                    filter_set_obj
+                                        .attrs()
                                         .into_iter()
                                         .find_map(|attr| {
                                             if let RpslAttribute::MpFilter(expr) = attr {
@@ -131,9 +130,11 @@ impl Resolver<'_, FilterSet, MpFilterExpr> for RpslEvaluator {
                                                 None
                                             }
                                         })
-                                        .ok_or_else(|| Error::from("no mp-filter attribute found"))
+                                        .ok_or_else(|| {
+                                            Error::FindAttribute(AttributeType::MpFilter, obj)
+                                        })
                                 } else {
-                                    Err(Error::from("unexpected rpsl object"))
+                                    Err(Error::RpslObjectClass(obj))
                                 }
                             }))
                             .transpose()
