@@ -19,7 +19,6 @@ bgpfu-lib = {path = "../lib"}
 clap = {version = "^4.0", features = ["derive"]}
 clap-verbosity-flag = "2.0"
 generic-ip = "0.1.0-rc.2"
-log = "^0.4"
 rpsl = "0.1.0-rc.1"
 simple_logger = {version = "^1.13", features = ["stderr"]}
 
