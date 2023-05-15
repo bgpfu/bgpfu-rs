@@ -35,4 +35,5 @@ jobs:
       - lint
       - test
     uses: wolcomm/.github/.github/workflows/rust-publish.yml@master
-    secrets: inherit
+    secrets:
+      CRATES_TOKEN: ${{ secrets.CRATES_TOKEN }}
