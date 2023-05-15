@@ -34,6 +34,13 @@ jobs:
     needs:
       - lint
       - test
-    uses: wolcomm/.github/.github/workflows/rust-publish.yml@master
+    strategy:
+      matrix:
+        package:
+          - bgpfu-lib
+          - bgpfu-cli
+    uses: wolcomm/.github/.github/workflows/rust-publish.yml@explicit-package
+    with:
+      package: ${{ matrix.package }}
     secrets:
       CRATES_TOKEN: ${{ secrets.CRATES_TOKEN }}
