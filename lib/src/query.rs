@@ -21,7 +21,7 @@ use crate::error::Error;
 /// # Examples
 ///
 /// ``` no_run
-/// use bgpfu::query::RpslEvaluator;
+/// use bgpfu::RpslEvaluator;
 /// use ip::traits::PrefixSet;
 /// use rpsl::expr::MpFilterExpr;
 ///
