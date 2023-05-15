@@ -27,20 +27,27 @@ jobs:
       toolchain: ${{ matrix.toolchain }}
       args: ${{ matrix.args }}
 
-  publish:
-    name: publish
+  publish-lib:
+    name: publish-lib
     if: ${{ github.event_name == 'push' &&
             startsWith(github.ref, 'refs/tag') }}
     needs:
       - lint
       - test
-    strategy:
-      matrix:
-        package:
-          - bgpfu-lib
-          - bgpfu-cli
     uses: wolcomm/.github/.github/workflows/rust-publish.yml@explicit-package
     with:
-      package: ${{ matrix.package }}
+      package: bgpfu-lib
+    secrets:
+      CRATES_TOKEN: ${{ secrets.CRATES_TOKEN }}
+
+  publish-cli:
+    name: publish-cli
+    if: ${{ github.event_name == 'push' &&
+            startsWith(github.ref, 'refs/tag') }}
+    needs:
+      - publish-lib
+    uses: wolcomm/.github/.github/workflows/rust-publish.yml@explicit-package
+    with:
+      package: bgpfu-cli
     secrets:
       CRATES_TOKEN: ${{ secrets.CRATES_TOKEN }}
