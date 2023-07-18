@@ -1,0 +1,31 @@
+[package]
+name = "bgpfu-junos-agent"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[[bin]]
+name = "bgpfu-junos-agent"
+
+[dependencies]
+anyhow.workspace = true
+bgpfu-lib.workspace = true
+clap.workspace = true
+clap-verbosity-flag.workspace = true
+generic-ip.workspace = true
+log.workspace = true
+juniper-jet = {workspace = true, features = ["junos-21-4"]}
+rpsl.workspace = true
+simplelog = { version = "0.12" }
+tokio.workspace = true
+tonic.workspace = true
+tower.workspace = true
+
+[dev-dependencies]
+version-sync.workspace = true
