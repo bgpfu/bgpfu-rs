@@ -19,7 +19,7 @@ bgpfu-lib = {path = "./lib", version = "0.1.0-alpha.2"}
 anyhow = "^1.0"
 clap = {version = "^4.0", features = ["derive"]}
 clap-verbosity-flag = "2.0"
-generic-ip = "0.1.0-rc.2"
+generic-ip = "0.1.0-rc.3"
 irrc = "0.1.0-rc.5"
 log = "^0.4"
 rpsl = "0.1.0-rc.1"
