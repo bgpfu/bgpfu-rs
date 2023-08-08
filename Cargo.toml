@@ -17,7 +17,7 @@ categories = ["network-programming", "database"]
 bgpfu-lib = {path = "./lib", version = "0.1.0-alpha.2"}
 # external
 anyhow = "^1.0"
-clap = {version = "^4.0", features = ["derive"]}
+clap = {version = "^4.3", features = ["derive"]}
 clap-verbosity-flag = "2.0"
 generic-ip = "0.1.0-rc.2"
 irrc = "0.1.0-rc.5"
