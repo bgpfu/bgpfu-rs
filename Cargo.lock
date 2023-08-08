@@ -291,9 +291,9 @@ dependencies = [
 
 [[package]]
 name = "generic-ip"
-version = "0.1.0-rc.2"
+version = "0.1.0-rc.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4035d3132ad788049e089c252bbbafddd9844c62e0e451418a43cfca2f31cead"
+checksum = "37e7a6b43582307e2949f81bad583a9593d90431a55733ed2c0e7fdd3438a47e"
 dependencies = [
  "bitvec",
  "num-traits",
