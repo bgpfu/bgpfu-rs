@@ -8,7 +8,7 @@ use ip::traits::PrefixSet as _;
 
 use rpsl::expr::MpFilterExpr;
 
-use simple_logger::SimpleLogger;
+use simplelog::SimpleLogger;
 
 use crate::Format;
 
@@ -16,9 +16,10 @@ use crate::Format;
 #[allow(clippy::missing_errors_doc)]
 pub fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
-    SimpleLogger::new()
-        .with_level(args.verbosity.log_level_filter())
-        .init()?;
+    SimpleLogger::init(
+        args.verbosity.log_level_filter(),
+        simplelog::Config::default(),
+    )?;
     RpslEvaluator::new(args.host(), args.port())?
         .evaluate(args.filter())?
         .ranges()
