@@ -2,12 +2,16 @@ use std::{fs, marker::PhantomData, path::PathBuf};
 
 use anyhow::{anyhow, bail, Context};
 
-use jet::junos_21_4::jnx::jet::{
+use jet::junos_23_1::jnx::jet::{
     authentication::{authentication_client::AuthenticationClient, LoginRequest},
     common::StatusCode,
     management::{
-        management_client::ManagementClient, op_command_get_request::Command, OpCommandGetRequest,
-        OpCommandOutputFormat,
+        ephemeral_config_get_response::ConfigPathResponse,
+        ephemeral_config_set_request::{config_operation::Value, ConfigOperation},
+        management_client::ManagementClient,
+        op_command_get_request::Command,
+        ConfigGetOutputFormat, ConfigOperationType, ConfigPathRequest, EphemeralConfigGetRequest,
+        EphemeralConfigSetRequest, OpCommandGetRequest, OpCommandOutputFormat,
     },
 };
 
@@ -15,14 +19,9 @@ use tokio::net::UnixStream;
 
 use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint};
 
-pub(crate) trait State {}
+use crate::config::{read::FromXml, write::ToXml};
 
-pub(crate) enum New {}
-impl State for New {}
-
-pub(crate) enum Authenticated {}
-impl State for Authenticated {}
-
+#[derive(Debug, Clone)]
 pub(crate) enum Transport {
     Unix(UnixTransport),
     Https(HttpsTransport),
@@ -50,6 +49,7 @@ impl Transport {
     }
 }
 
+#[derive(Debug, Clone)]
 pub(crate) struct UnixTransport {
     path: PathBuf,
 }
@@ -63,7 +63,7 @@ impl UnixTransport {
         Endpoint::from_static("http://[::]")
             .connect_with_connector(tower::service_fn(move |_| {
                 let path = self.path.clone();
-                log::debug!("attempting to connect to socket '{}'", path.display());
+                log::info!("attempting to connect to socket '{}'", path.display());
                 UnixStream::connect(path)
             }))
             .await
@@ -72,6 +72,7 @@ impl UnixTransport {
     }
 }
 
+#[derive(Debug, Clone)]
 pub(crate) struct HttpsTransport {
     host: String,
     port: u16,
@@ -143,6 +144,7 @@ WGlCmPoVjoc51As4M6pWmolTpW/P8jN0t36O84Bnzg==
 
     async fn connect(self) -> anyhow::Result<Client<New>> {
         let uri = format!("https://{}:{}", self.host, self.port);
+        log::info!("trying to connect to JET endpoint '{uri}'");
         Endpoint::from_shared(uri)
             .context("failed to parse endpoint URL")?
             .tls_config(self.tls_config)
@@ -153,6 +155,14 @@ WGlCmPoVjoc51As4M6pWmolTpW/P8jN0t36O84Bnzg==
             .map(Client::from)
     }
 }
+
+pub(crate) trait State {}
+
+pub(crate) enum New {}
+impl State for New {}
+
+pub(crate) enum Authenticated {}
+impl State for Authenticated {}
 
 pub(crate) struct Client<S: State> {
     channel: Channel,
@@ -169,7 +179,11 @@ impl From<Channel> for Client<New> {
 }
 
 impl Client<New> {
+    // TODO:
+    // get version from Cargo.toml
     const CLIENT_ID: &str = "bgpfu-junos-agent-0.0.0";
+    // TODO:
+    // find out what this is for
     const GROUP_ID: &str = "";
 
     pub(crate) async fn authenticate(
@@ -208,11 +222,15 @@ impl Client<New> {
 }
 
 impl Client<Authenticated> {
-    pub(crate) async fn op_command(&mut self, command: String) -> anyhow::Result<String> {
+    async fn op_command(
+        &mut self,
+        command: Command,
+        format: OpCommandOutputFormat,
+    ) -> anyhow::Result<String> {
         log::debug!("attempting to run operational cmd");
         let req = OpCommandGetRequest {
-            out_format: OpCommandOutputFormat::OpCommandOutputCli.into(),
-            command: Some(Command::CliCommand(command)),
+            out_format: format.into(),
+            command: Some(command),
         };
         let mut resp_stream = ManagementClient::new(&mut self.channel)
             .op_command_get(req)
@@ -231,5 +249,186 @@ impl Client<Authenticated> {
             };
         }
         Ok(data)
+    }
+
+    pub(crate) async fn get_running_config<T>(&mut self) -> anyhow::Result<T>
+    where
+        T: FromXml,
+    {
+        log::info!("trying to get running config");
+        let data = self
+            .op_command(
+                Command::XmlCommand(T::QUERY_CMD.to_string()),
+                OpCommandOutputFormat::OpCommandOutputXml,
+            )
+            .await
+            .context("failed to execute operational command")?;
+        log::debug!("{data}");
+        T::from_xml(&data).context("failed to deserialize config data")
+    }
+
+    pub(crate) async fn _get_ephemeral_config(
+        &mut self,
+        instance_name: String,
+    ) -> anyhow::Result<impl Iterator<Item = ConfigPathResponse>> {
+        let req = EphemeralConfigGetRequest {
+            encoding: ConfigGetOutputFormat::ConfigGetOutputXml.into(),
+            instance_name,
+            config_requests: vec![ConfigPathRequest {
+                id: "root".to_string(),
+                path: "/configuration/policy-options".to_string(),
+            }],
+        };
+        let resp = ManagementClient::new(&mut self.channel)
+            .ephemeral_config_get(req)
+            .await
+            .context("JET ephemeral config get command failed")?
+            .into_inner();
+        if let Some(status) = resp.status {
+            match status.code() {
+                StatusCode::Success => {
+                    log::info!("ephemeral config get command successful");
+                    Ok(resp.config_responses.into_iter())
+                }
+                StatusCode::Failure => {
+                    bail!("ephemeral config get command failed: {}", status.message)
+                }
+            }
+        } else {
+            bail!("no status in response message: {:?}", resp);
+        }
+    }
+
+    pub(crate) async fn clear_ephemeral_config(
+        &mut self,
+        instance_name: String,
+        node: String,
+    ) -> anyhow::Result<()> {
+        log::info!(
+            "trying to clear ephemeral database instance {instance_name} {node} configuration"
+        );
+        let config = format!(
+            r#"
+            <configuration>
+                <{node} operation="delete"/>
+            </configuration>
+            "#
+        );
+        log::debug!("{config}");
+        let req = EphemeralConfigSetRequest {
+            instance_name,
+            config_operations: vec![ConfigOperation {
+                id: "clear".to_string(),
+                operation: ConfigOperationType::ConfigOperationUpdate.into(),
+                path: "/".to_string(),
+                value: Some(Value::XmlConfig(config)),
+            }],
+            validate_config: true,
+            load_only: false,
+        };
+        let resp = ManagementClient::new(&mut self.channel)
+            .ephemeral_config_set(req)
+            .await
+            .context("ephemeral config set command failed")?
+            .into_inner();
+        if let Some(status) = resp.status {
+            match status.code() {
+                StatusCode::Success => {
+                    resp.operation_responses
+                        .into_iter()
+                        .try_for_each(|oper_resp| {
+                            if let Some(status) = oper_resp.status {
+                                match status.code() {
+                                    StatusCode::Success => {
+                                        log::info!(
+                                            "ephemeral config set operation '{}' successful",
+                                            oper_resp.id
+                                        );
+                                        Ok(())
+                                    }
+                                    StatusCode::Failure => {
+                                        bail!(
+                                            "ephemeral config set operation '{}' failed: {}",
+                                            oper_resp.id,
+                                            status.message
+                                        );
+                                    }
+                                }
+                            } else {
+                                bail!("no status in operation response message: {:?}", oper_resp);
+                            }
+                        })
+                }
+                StatusCode::Failure => {
+                    bail!("ephemeral config set command failed: {}", status.message)
+                }
+            }
+        } else {
+            bail!("no status in response message: {:?}", resp);
+        }
+    }
+
+    pub(crate) async fn set_ephemeral_config<T>(
+        &mut self,
+        instance_name: String,
+        source: T,
+    ) -> anyhow::Result<()>
+    where
+        T: ToXml + Send,
+    {
+        log::info!("trying to set ephemeral database instance {instance_name} configuration");
+        let config = source.to_xml().context("failed to get configuration XML")?;
+        log::debug!("{config}");
+        let req = EphemeralConfigSetRequest {
+            instance_name,
+            config_operations: vec![ConfigOperation {
+                id: "set".to_string(),
+                operation: ConfigOperationType::ConfigOperationUpdate.into(),
+                path: "/".to_string(),
+                value: Some(Value::XmlConfig(config)),
+            }],
+            validate_config: true,
+            load_only: false,
+        };
+        let resp = ManagementClient::new(&mut self.channel)
+            .ephemeral_config_set(req)
+            .await
+            .context("ephemeral config set command failed")?
+            .into_inner();
+        if let Some(status) = resp.status {
+            match status.code() {
+                StatusCode::Success => {
+                    resp.operation_responses
+                        .into_iter()
+                        .try_for_each(|oper_resp| {
+                            if let Some(status) = oper_resp.status {
+                                match status.code() {
+                                    StatusCode::Success => {
+                                        log::info!(
+                                            "ephemeral config set operation '{}' successful",
+                                            oper_resp.id
+                                        );
+                                        Ok(())
+                                    }
+                                    StatusCode::Failure => {
+                                        bail!(
+                                            "ephemeral config set operation '{}' failed: {}",
+                                            oper_resp.id,
+                                            status.message
+                                        );
+                                    }
+                                }
+                            } else {
+                                bail!("no status in operation response message: {:?}", oper_resp);
+                            }
+                        })
+                }
+                StatusCode::Failure => {
+                    bail!("ephemeral config set command failed: {}", status.message)
+                }
+            }
+        } else {
+            bail!("no status in response message: {:?}", resp);
+        }
     }
 }

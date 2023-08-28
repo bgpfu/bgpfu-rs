@@ -46,7 +46,9 @@
 mod cli;
 pub use self::cli::main;
 
+mod config;
 mod jet;
+mod task;
 
 // silence unused dev-dependency warnings
 #[cfg(test)]
