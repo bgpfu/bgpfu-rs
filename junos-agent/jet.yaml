@@ -5,5 +5,5 @@ copyright: "Copyright 2023, Workonline Communications"
 arch: "x86"
 abi: "64"
 files:
-  - source: ../target/x86_64-unknown-freebsd/debug/bgpfu-junos-agent
+  - source: ../target/x86_64-unknown-freebsd/release/bgpfu-junos-agent
     destination: /var/db/scripts/jet/bgpfu-junos-agent
