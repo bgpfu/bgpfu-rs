@@ -94,7 +94,7 @@ impl<'a> Evaluator<'a> for RpslEvaluator {
     }
 
     fn sink_error(&mut self, err: &(dyn std::error::Error + Send + Sync + 'static)) -> bool {
-        log::warn!("{err}");
+        log::warn!("{err:#}");
         true
     }
 }

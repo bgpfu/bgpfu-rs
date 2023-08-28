@@ -71,7 +71,7 @@ impl Updater {
                 "policy-options".to_string(),
             )
             .await
-            .unwrap_or_else(|err| log::warn!("failed to clear ephemeral configuration: {err}"));
+            .unwrap_or_else(|err| log::warn!("failed to clear ephemeral configuration: {err:#}"));
 
         jet_client
             .set_ephemeral_config(self.ephemeral_db_instance, config)
@@ -116,7 +116,7 @@ impl Loop {
                             Ok(())
                         })
                         .unwrap_or_else(|err| {
-                            log::error!("updater job failed: {err}");
+                            log::error!("updater job failed: {err:#}");
                         });
                     interval.reset();
                 }

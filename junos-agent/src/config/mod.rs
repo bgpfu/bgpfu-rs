@@ -13,6 +13,8 @@ pub(crate) mod write;
 pub(crate) struct PolicyStmt<C: RouteFilterContent> {
     name: String,
     filter_expr: MpFilterExpr,
+    // TODO: honour 'inactive' state
+    // active: bool,
     content: C,
 }
 
@@ -50,9 +52,8 @@ impl CandidatePolicyStmts {
                         Ok(set) => Some(set),
                         Err(err) => {
                             log::error!(
-                                "failed to evaluate filter expression {}: {}",
+                                "failed to evaluate filter expression {}: {err:#}",
                                 candidate.filter_expr,
-                                err
                             );
                             None
                         }
