@@ -3,3 +3,5 @@ result*
 pki/
 bgpfu-junos-agent-x86-64-0.1.0-alpha.1.tgz
 .build/
+flamegraph.svg
+perf.data
