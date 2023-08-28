@@ -10,7 +10,7 @@ use clap::{Args, Parser, Subcommand};
 
 use clap_verbosity_flag::{Verbosity, WarnLevel};
 
-use simplelog::{SimpleLogger, WriteLogger};
+use simplelog::{ColorChoice, TermLogger, TerminalMode, WriteLogger};
 
 use crate::{jet::Transport, task::Updater};
 
@@ -157,7 +157,8 @@ impl LoggingOpts {
                     WriteLogger::init(level, config, file).context("failed to initialize logger")
                 }),
             LoggingDest::StdErr => {
-                SimpleLogger::init(level, config).context("failed to initialize logger")
+                TermLogger::init(level, config, TerminalMode::Stderr, ColorChoice::Auto)
+                    .context("failed to initialize logger")
             }
         }
     }
