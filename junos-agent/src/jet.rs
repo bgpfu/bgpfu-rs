@@ -80,7 +80,7 @@ pub(crate) struct HttpsTransport {
 }
 
 impl HttpsTransport {
-    const DEFAULT_CA_CERT: &str = r"
+    const DEFAULT_CA_CERT: &'static str = r"
 -----BEGIN CERTIFICATE-----
 MIIE+zCCAuOgAwIBAgIUPGca+m6PygDD+Tk3ApM+6wfuBI8wDQYJKoZIhvcNAQEL
 BQAwDTELMAkGA1UEAwwCY2EwHhcNMjMwNTE3MTMzMDEwWhcNMjQwNTE2MTMzMDEw
@@ -181,10 +181,10 @@ impl From<Channel> for Client<New> {
 impl Client<New> {
     // TODO:
     // get version from Cargo.toml
-    const CLIENT_ID: &str = "bgpfu-junos-agent-0.0.0";
+    const CLIENT_ID: &'static str = "bgpfu-junos-agent-0.0.0";
     // TODO:
     // find out what this is for
-    const GROUP_ID: &str = "";
+    const GROUP_ID: &'static str = "";
 
     pub(crate) async fn authenticate(
         self,
