@@ -1,5 +1,6 @@
 [workspace]
 members = ["lib", "cli", "junos-agent"]
+resolver = "2"
 
 [workspace.package]
 version = "0.1.0-alpha.2"
@@ -14,13 +15,13 @@ categories = ["network-programming", "database"]
 
 [workspace.dependencies]
 # internal
-bgpfu-lib = {path = "./lib", version = "0.1.0-alpha.2"}
+bgpfu-lib = { path = "./lib", version = "0.1.0-alpha.2" }
 # external
 anyhow = "^1.0"
 clap = {version = "^4.0", features = ["derive"]}
 clap-verbosity-flag = "2.0"
 generic-ip = "0.1.0-rc.4"
-irrc = "0.1.0-rc.5"
+irrc = "0.1.0-rc.6"
 juniper-jet = { version = "0.1.0-alpha.1", default-features = false }
 log = "^0.4"
 rpsl = "0.1.0-rc.1"
