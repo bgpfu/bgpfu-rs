@@ -1,0 +1,17 @@
+[package]
+name = "bgpfu-netconf"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lib]
+name = "netconf"
+
+[dev-dependencies]
+version-sync.workspace = true

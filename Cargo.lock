@@ -232,6 +232,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "bgpfu-netconf"
+version = "0.1.0-alpha.2"
+dependencies = [
+ "version-sync",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
