@@ -1,4 +1,4 @@
-use std::{fmt::Debug, str::from_utf8};
+use std::{fmt::Debug, io::Write, str::from_utf8, string::FromUtf8Error};
 
 use async_trait::async_trait;
 
@@ -12,6 +12,8 @@ pub(crate) use self::hello::{Capabilities, Capability, ClientHello, ServerHello,
 
 pub mod rpc;
 
+const MARKER: &[u8] = b"]]>]]>";
+
 pub trait FromXml: Sized {
     type Error: std::error::Error + Send + Sync + 'static;
 
@@ -21,9 +23,15 @@ pub trait FromXml: Sized {
 }
 
 pub trait ToXml {
-    type Error: std::error::Error + Send + Sync + 'static;
+    type Error: From<FromUtf8Error> + std::error::Error + Send + Sync + 'static;
 
-    fn to_xml(&self) -> Result<String, Self::Error>;
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error>;
+
+    fn to_xml(&self) -> Result<String, Self::Error> {
+        let mut buf = Vec::new();
+        self.write_xml(&mut buf)?;
+        Ok(String::from_utf8(buf)?)
+    }
 }
 
 #[async_trait]

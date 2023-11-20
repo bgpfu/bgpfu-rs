@@ -1,63 +1,81 @@
 use std::fmt::Debug;
 
-use serde::Serialize;
+use crate::message::{FromXml, ToXml};
 
-use crate::message::FromXml;
-
-pub trait Operation: Debug + Send + Sync {
-    type RequestData: Debug + Serialize + Send + Sync;
+pub trait Operation: Debug + ToXml + Send + Sync {
     type ReplyData: Debug + FromXml;
 }
 
 pub mod get_config {
-    use std::fmt;
+    use std::{fmt, io::Write};
 
-    use quick_xml::{events::Event, Reader};
-    use serde::{Deserialize, Serialize};
+    use quick_xml::{events::Event, Reader, Writer};
 
-    use super::{FromXml, Operation};
+    use crate::Error;
 
-    #[derive(Debug, Clone, Copy)]
-    pub struct GetConfig;
+    use super::{FromXml, Operation, ToXml};
 
-    impl Operation for GetConfig {
-        type RequestData = Request;
-        type ReplyData = Reply;
-    }
-
-    #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-    #[serde(rename_all = "kebab-case")]
-    pub struct Request {
-        get_config: RequestInner,
-    }
-
-    #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-    pub struct RequestInner {
+    #[derive(Debug, Default, Clone)]
+    pub struct GetConfig {
         source: Source,
-        #[serde(skip_serializing_if = "Option::is_none")]
         filter: Option<String>,
     }
 
-    #[derive(Debug, Default, Copy, Clone, Serialize, Deserialize)]
-    pub struct Source {
-        #[serde(rename = "$value")]
-        inner: SourceInner,
+    impl Operation for GetConfig {
+        type ReplyData = Reply;
     }
 
-    #[derive(Debug, Default, Copy, Clone, Serialize, Deserialize)]
-    #[serde(rename_all = "kebab-case")]
-    pub enum SourceInner {
+    impl ToXml for GetConfig {
+        type Error = Error;
+
+        fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+            _ = Writer::new(writer)
+                .create_element("get-config")
+                .write_inner_content(|writer| {
+                    _ = writer
+                        .create_element("source")
+                        .write_inner_content(|writer| self.source.write_xml(writer.get_mut()))?;
+                    if let Some(ref filter) = self.filter {
+                        _ = writer
+                            .create_element("filter")
+                            .write_inner_content(|writer| {
+                                writer
+                                    .get_mut()
+                                    .write_all(filter.as_bytes())
+                                    .map_err(|err| Error::RpcRequestSerialization(err.into()))
+                            })?;
+                    };
+                    Ok::<_, Self::Error>(())
+                })?;
+            Ok(())
+        }
+    }
+
+    #[derive(Debug, Default, Copy, Clone)]
+    pub enum Source {
         #[default]
         Running,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    impl ToXml for Source {
+        type Error = Error;
+
+        fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+            let mut writer = Writer::new(writer);
+            _ = match self {
+                Self::Running => writer.create_element("running").write_empty()?,
+            };
+            Ok(())
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct Reply {
         configuration: Box<str>,
     }
 
     impl FromXml for Reply {
-        type Error = crate::Error;
+        type Error = Error;
 
         fn from_xml<S>(input: S) -> Result<Self, Self::Error>
         where
@@ -91,24 +109,64 @@ pub mod get_config {
             self.configuration.fmt(f)
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn default_request_to_xml() {
+            let req = GetConfig::default();
+            let expect = "<get-config><source><running/></source></get-config>";
+            assert_eq!(req.to_xml().unwrap(), expect);
+        }
+
+        #[test]
+        fn reply_from_xml() {
+            let reply = "<configuration><top/></configuration>";
+            let expect = Reply {
+                configuration: "<top/>".into(),
+            };
+            assert_eq!(Reply::from_xml(reply).unwrap(), expect);
+        }
+    }
 }
 
 pub mod close_session {
-    use serde::{Deserialize, Serialize};
+    use std::io::Write;
 
-    use super::{super::Empty, Operation};
+    use quick_xml::Writer;
 
-    #[derive(Debug, Clone, Copy)]
+    use super::{super::Empty, Operation, ToXml};
+    use crate::Error;
+
+    #[derive(Debug, Default, Clone, Copy)]
     pub struct CloseSession;
 
     impl Operation for CloseSession {
-        type RequestData = Request;
         type ReplyData = Empty;
     }
 
-    #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
-    #[serde(rename_all = "kebab-case")]
-    pub struct Request {
-        close_session: (),
+    impl ToXml for CloseSession {
+        type Error = Error;
+
+        fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+            _ = Writer::new(writer)
+                .create_element("close-session")
+                .write_empty()?;
+            Ok(())
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn request_to_xml() {
+            let req = CloseSession;
+            let expect = "<close-session/>";
+            assert_eq!(req.to_xml().unwrap(), expect);
+        }
     }
 }

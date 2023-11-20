@@ -4,10 +4,7 @@ use clap_verbosity_flag::{Verbosity, WarnLevel};
 use simplelog::{ColorChoice, TermLogger, TerminalMode};
 
 use netconf::{
-    message::rpc::operation::{
-        close_session::{self, CloseSession},
-        get_config::{self, GetConfig},
-    },
+    message::rpc::operation::{close_session::CloseSession, get_config::GetConfig},
     transport::Password,
     Session,
 };
@@ -31,15 +28,12 @@ async fn main() -> anyhow::Result<()> {
         println!("    {}", capability.uri());
     });
     let config = session
-        .rpc::<GetConfig>(get_config::Request::default())
+        .rpc(GetConfig::default())
         .await?
         .await?
         .ok_or_else(|| anyhow!("expected config data"))?;
     println!("{config}");
-    _ = session
-        .rpc::<CloseSession>(close_session::Request::default())
-        .await?
-        .await?;
+    _ = session.rpc(CloseSession).await?.await?;
     Ok(())
 }
 

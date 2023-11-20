@@ -21,14 +21,20 @@ pub enum Error {
     #[error("failed to dequeue a message: {0}")]
     DequeueMessage(&'static str),
 
+    #[error("failed to utf-8 encode message")]
+    EncodeMessage(#[from] std::string::FromUtf8Error),
+
     #[error("failed to decode utf-8")]
     DecodeMessage(#[from] std::str::Utf8Error),
 
-    #[error("failed to deserialize message")]
-    Deserialize(#[from] quick_xml::de::DeError),
-
     #[error("failed to parse xml document: {0:?}")]
     XmlParse(#[from] Option<quick_xml::Error>),
+
+    #[error("missing '{1}' element while parsing '{0}' message")]
+    MissingElement(&'static str, &'static str),
+
+    #[error("missing '{1}' attribute while parsing '{0}' message")]
+    MissingAttribute(&'static str, &'static str),
 
     #[error("message-id attribute missing in rpc-reply")]
     NoMessageId,
@@ -50,6 +56,9 @@ pub enum Error {
 
     #[error("attempted to poll for an already completed request")]
     RequestComplete,
+
+    #[error("failed to serialize rpc request")]
+    RpcRequestSerialization(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
 
     #[error("failed to deserialize rpc-reply data")]
     RpcReplyDeserialization(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),

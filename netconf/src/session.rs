@@ -81,7 +81,7 @@ impl<T: Transport> Session<T> {
     #[tracing::instrument(skip(self))]
     pub async fn rpc<O: rpc::Operation>(
         &mut self,
-        request: O::RequestData,
+        request: O,
     ) -> Result<impl Future<Output = Result<Option<O::ReplyData>, Error>> + '_, Error> {
         let message_id = self.last_message_id.increment();
         let request = rpc::Request::<O>::new(message_id, request);

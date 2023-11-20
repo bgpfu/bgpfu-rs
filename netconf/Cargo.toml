@@ -19,10 +19,9 @@ thiserror.workspace = true
 async-trait = "^0.1"
 bytes = "^1.0"
 memchr = "^2.0"
-quick-xml = { version = "^0.31", features = ["serialize"] }
+quick-xml = "^0.31"
 russh = "^0.39"
 russh-keys = "^0.38"
-serde = "^1.0"
 tracing = { version = "^0.1", features = ["log"] }
 
 

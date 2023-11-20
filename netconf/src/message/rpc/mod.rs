@@ -1,22 +1,21 @@
 use std::{
     convert::Infallible,
     fmt::{self, Debug},
+    io::Write,
 };
 
 use async_trait::async_trait;
 use quick_xml::{
     events::{attributes::Attribute, Event},
-    Reader,
+    Reader, Writer,
 };
-use serde::{Deserialize, Serialize};
 
-use super::{ClientMsg, FromXml, ServerMsg, ToXml};
+use super::{ClientMsg, FromXml, ServerMsg, ToXml, MARKER};
 
 pub mod operation;
 pub use self::operation::Operation;
 
-#[derive(Debug, Default, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(transparent)]
+#[derive(Debug, Default, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct MessageId(usize);
 
 impl MessageId {
@@ -34,16 +33,14 @@ impl TryFrom<Attribute<'_>> for MessageId {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub(crate) struct Request<O: Operation> {
-    #[serde(rename = "@message-id")]
     message_id: MessageId,
-    #[serde(flatten)]
-    operation: O::RequestData,
+    operation: O,
 }
 
 impl<O: Operation> Request<O> {
-    pub(crate) const fn new(message_id: MessageId, operation: O::RequestData) -> Self {
+    pub(crate) const fn new(message_id: MessageId, operation: O) -> Self {
         Self {
             message_id,
             operation,
@@ -54,8 +51,16 @@ impl<O: Operation> Request<O> {
 impl<O: Operation> ToXml for Request<O> {
     type Error = crate::Error;
 
-    fn to_xml(&self) -> Result<String, Self::Error> {
-        Ok(quick_xml::se::to_string_with_root("rpc", self)?)
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+        _ = Writer::new(writer)
+            .create_element("rpc")
+            .with_attribute(("message-id", self.message_id.0.to_string().as_ref()))
+            .write_inner_content(|writer| {
+                self.operation
+                    .write_xml(writer.get_mut())
+                    .map_err(|err| Self::Error::RpcRequestSerialization(err.into()))
+            })?;
+        Ok(())
     }
 }
 
@@ -64,7 +69,7 @@ impl<O: Operation> ClientMsg for Request<O> {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PartialReply {
     message_id: MessageId,
-    buf: Box<str>,
+    inner_buf: Box<str>,
 }
 
 impl PartialReply {
@@ -83,19 +88,39 @@ impl FromXml for PartialReply {
     {
         let mut reader = Reader::from_str(input.as_ref());
         _ = reader.trim_text(true);
+        let (mut message_id, mut inner_buf) = (None, None);
         tracing::debug!("expecting <rpc-reply>");
-        let message_id = match reader.read_event()? {
-            Event::Start(tag) if tag.name().as_ref() == b"rpc-reply" => {
-                tracing::debug!("trying to parse message-id");
-                tag.try_get_attribute("message-id")?
-                    .ok_or_else(|| crate::Error::NoMessageId)
-                    .and_then(MessageId::try_from)
+        loop {
+            match reader.read_event()? {
+                Event::Start(tag) if tag.name().as_ref() == b"rpc-reply" => {
+                    tracing::debug!("trying to parse message-id");
+                    message_id = Some(
+                        tag.try_get_attribute("message-id")?
+                            .ok_or_else(|| crate::Error::NoMessageId)
+                            .and_then(MessageId::try_from)?,
+                    );
+                    inner_buf = Some(
+                        reader
+                            .read_text(tag.to_end().name())?
+                            .as_ref()
+                            .trim()
+                            .into(),
+                    );
+                }
+                Event::Comment(_) => continue,
+                Event::Eof => break,
+                Event::Text(txt) if txt.as_ref() == MARKER => break,
+                event => {
+                    tracing::error!(?event, "unexpected xml event");
+                    return Err(crate::Error::XmlParse(None));
+                }
             }
-            _ => Err(crate::Error::XmlParse(None)),
-        }?;
+        }
         Ok(Self {
-            message_id,
-            buf: input.as_ref().trim_end_matches("]]>").into(),
+            message_id: message_id
+                .ok_or_else(|| Self::Error::MissingAttribute("rpc", "message-id"))?,
+            // TODO: This is a poor choice of error!
+            inner_buf: inner_buf.ok_or_else(|| Self::Error::XmlParse(None))?,
         })
     }
 }
@@ -121,61 +146,14 @@ impl<O: Operation> Reply<O> {
     }
 }
 
-impl<O: Operation> FromXml for Reply<O> {
-    type Error = crate::Error;
-
-    #[tracing::instrument]
-    fn from_xml<S>(input: S) -> Result<Self, Self::Error>
-    where
-        S: AsRef<str> + Debug,
-    {
-        let mut reader = Reader::from_str(input.as_ref());
-        _ = reader.trim_text(true);
-        tracing::debug!("expecting <rpc-reply>");
-        match reader.read_event()? {
-            Event::Start(tag) if tag.name().as_ref() == b"rpc-reply" => {
-                tracing::debug!("trying to parse message-id");
-                let message_id = tag
-                    .try_get_attribute("message-id")?
-                    .ok_or_else(|| crate::Error::NoMessageId)
-                    .and_then(MessageId::try_from)?;
-                let end = tag.to_end();
-                let span = reader.read_text(end.name())?;
-                let inner = ReplyInner::from_xml(span)?;
-                tracing::debug!("expecting eof");
-                match reader.read_event()? {
-                    Event::Eof => {
-                        tracing::debug!(?message_id, ?inner);
-                        Ok(Self { message_id, inner })
-                    }
-                    event => {
-                        tracing::error!(?event, "unexpected xml event");
-                        Err(crate::Error::XmlParse(None))
-                    }
-                }
-            }
-            event => {
-                tracing::error!(?event, "unexpected xml event");
-                Err(crate::Error::XmlParse(None))
-            }
-        }
-    }
-}
-
 impl<O: Operation> TryFrom<PartialReply> for Reply<O> {
     type Error = crate::Error;
 
     #[tracing::instrument]
     fn try_from(value: PartialReply) -> Result<Self, Self::Error> {
-        let this = Self::from_xml(&value.buf)?;
-        if this.message_id == value.message_id {
-            Ok(this)
-        } else {
-            Err(crate::Error::MessageIdMismatch(
-                value.message_id,
-                this.message_id,
-            ))
-        }
+        let message_id = value.message_id;
+        let inner = ReplyInner::from_xml(value.inner_buf)?;
+        Ok(Self { message_id, inner })
     }
 }
 
@@ -236,7 +214,7 @@ impl<D: FromXml + Debug> FromXml for ReplyInner<D> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Empty {}
 
 impl FromXml for Empty {
@@ -250,7 +228,7 @@ impl FromXml for Empty {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RpcError;
 
 impl FromXml for RpcError {
@@ -274,18 +252,27 @@ impl std::error::Error for RpcError {}
 
 #[cfg(test)]
 mod tests {
+    use quick_xml::events::BytesText;
+
     use super::*;
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    struct Foo;
-
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-    struct FooOperation {
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct Foo {
         foo: &'static str,
     }
 
+    impl ToXml for Foo {
+        type Error = crate::Error;
+
+        fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+            _ = Writer::new(writer)
+                .create_element("foo")
+                .write_text_content(BytesText::new(self.foo))?;
+            Ok(())
+        }
+    }
+
     impl Operation for Foo {
-        type RequestData = FooOperation;
         type ReplyData = Empty;
     }
 
@@ -293,7 +280,7 @@ mod tests {
     fn serialize_foo_request() {
         let req: Request<Foo> = Request {
             message_id: MessageId(101),
-            operation: FooOperation { foo: "bar" },
+            operation: Foo { foo: "bar" },
         };
         let expect = r#"<rpc message-id="101"><foo>bar</foo></rpc>"#;
         assert_eq!(req.to_xml().unwrap(), expect);
@@ -310,7 +297,12 @@ mod tests {
             message_id: MessageId(101),
             inner: ReplyInner::Ok,
         };
-        assert_eq!(expect, Reply::from_xml(data).unwrap());
+        assert_eq!(
+            expect,
+            PartialReply::from_xml(data)
+                .and_then(Reply::try_from)
+                .unwrap()
+        );
     }
 
     #[test]
@@ -322,7 +314,7 @@ mod tests {
         "#;
         let expect = PartialReply {
             message_id: MessageId(101),
-            buf: data.into(),
+            inner_buf: "<ok/>".into(),
         };
         assert_eq!(expect, PartialReply::from_xml(data).unwrap());
     }
@@ -336,7 +328,7 @@ mod tests {
         "#;
         let expect = PartialReply {
             message_id: MessageId(101),
-            buf: data.into(),
+            inner_buf: "<data><foo/></data>".into(),
         };
         assert_eq!(expect, PartialReply::from_xml(data).unwrap());
     }
