@@ -13,5 +13,22 @@ categories.workspace = true
 [lib]
 name = "netconf"
 
+[dependencies]
+tokio.workspace = true
+thiserror.workspace = true
+async-trait = "^0.1"
+bytes = "^1.0"
+memchr = "^2.0"
+quick-xml = { version = "^0.31", features = ["serialize"] }
+russh = "^0.39"
+russh-keys = "^0.38"
+serde = "^1.0"
+tracing = { version = "^0.1", features = ["log"] }
+
+
 [dev-dependencies]
+anyhow.workspace = true
+clap.workspace = true
+clap-verbosity-flag.workspace = true
+simplelog.workspace = true
 version-sync.workspace = true

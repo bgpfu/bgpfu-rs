@@ -43,8 +43,26 @@
 // docs.rs build config
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
+#[allow(missing_docs, clippy::missing_errors_doc)]
+mod error;
+pub use self::error::Error;
+
+#[allow(missing_docs, clippy::missing_errors_doc)]
+pub mod message;
+
+#[allow(missing_docs, clippy::missing_errors_doc)]
+pub mod transport;
+
+#[allow(missing_docs, clippy::missing_errors_doc)]
+mod session;
+pub use self::session::Session;
+
 // silence unused dev-dependency warnings
 #[cfg(test)]
 mod deps {
+    use anyhow as _;
+    use clap as _;
+    use clap_verbosity_flag as _;
+    use simplelog as _;
     use version_sync as _;
 }
