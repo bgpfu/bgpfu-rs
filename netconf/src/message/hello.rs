@@ -12,7 +12,7 @@ use quick_xml::{
 
 use crate::Error;
 
-use super::{ClientMsg, FromXml, ServerMsg, ToXml};
+use super::{ClientMsg, FromXml, ServerMsg, ToXml, MARKER};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ServerHello {
@@ -64,7 +64,7 @@ impl FromXml for ServerHello {
                             Event::Eof => break,
                             event => {
                                 tracing::error!(?event, "unexpected xml event");
-                                return Err(Error::XmlParse(None));
+                                return Err(Error::UnexpectedXmlEvent(event.into_owned()));
                             }
                         };
                     }
@@ -73,10 +73,10 @@ impl FromXml for ServerHello {
                     continue;
                 }
                 Event::Eof => break,
-                Event::Text(txt) if txt.as_ref() == b"]]>]]>" => break,
+                Event::Text(txt) if txt.as_ref() == MARKER => break,
                 event => {
                     tracing::error!(?event, "unexpected xml event");
-                    return Err(Error::XmlParse(None));
+                    return Err(Error::UnexpectedXmlEvent(event.into_owned()));
                 }
             }
         }
@@ -167,7 +167,7 @@ impl FromXml for Capabilities {
                 Event::Eof => break,
                 event => {
                     tracing::error!(?event, "unexpected xml event");
-                    return Err(Error::XmlParse(None));
+                    return Err(Error::UnexpectedXmlEvent(event.into_owned()));
                 }
             }
         }

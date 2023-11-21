@@ -3,26 +3,27 @@ use std::{
     fmt::Debug,
     future::Future,
     mem,
+    sync::Arc,
 };
 
-use bytes::Bytes;
-use tokio::net::ToSocketAddrs;
+use tokio::{net::ToSocketAddrs, sync::Mutex};
 
 use crate::{
     message::{
         rpc, Capabilities, Capability, ClientHello, ClientMsg, ServerHello, ServerMsg, BASE,
     },
-    transport::{Password, RecvHandle, SendHandle, Ssh, Transport},
+    transport::{Password, Ssh, Transport},
     Error,
 };
 
 #[derive(Debug)]
-pub struct Session<T> {
-    transport: T,
+pub struct Session<T: Transport> {
+    transport_tx: Arc<Mutex<T::SendHandle>>,
+    transport_rx: Arc<Mutex<T::RecvHandle>>,
     capabilities: Capabilities,
     session_id: usize,
     last_message_id: rpc::MessageId,
-    requests: HashMap<rpc::MessageId, OutstandingRequest>,
+    requests: Arc<Mutex<HashMap<rpc::MessageId, OutstandingRequest>>>,
 }
 
 #[derive(Debug)]
@@ -53,23 +54,29 @@ impl Session<Ssh> {
         A: ToSocketAddrs + Send + Debug,
     {
         tracing::info!("starting ssh transport");
-        let mut transport = Ssh::connect(addr, username, password).await?;
+        let transport = Ssh::connect(addr, username, password).await?;
         let client_hello = ClientHello::new(&[BASE]);
-        let (tx, rx) = transport.split();
-        let ((), server_hello) = tokio::try_join!(client_hello.send(tx), ServerHello::recv(rx))?;
+        let (mut tx, mut rx) = transport.split();
+        let ((), server_hello) =
+            tokio::try_join!(client_hello.send(&mut tx), ServerHello::recv(&mut rx))?;
+        let transport_tx = Arc::new(Mutex::new(tx));
+        let transport_rx = Arc::new(Mutex::new(rx));
         let capabilities = client_hello.common_capabilities(&server_hello)?;
         let session_id = server_hello.session_id();
+        let requests = Arc::new(Mutex::new(HashMap::default()));
         Ok(Self {
-            transport,
+            transport_tx,
+            transport_rx,
             capabilities,
             session_id,
+            requests,
             last_message_id: rpc::MessageId::default(),
-            requests: HashMap::default(),
         })
     }
 }
 
 impl<T: Transport> Session<T> {
+    #[must_use]
     pub const fn session_id(&self) -> usize {
         self.session_id
     }
@@ -81,22 +88,25 @@ impl<T: Transport> Session<T> {
     #[tracing::instrument(skip(self))]
     pub async fn rpc<O: rpc::Operation>(
         &mut self,
-        request: O,
-    ) -> Result<impl Future<Output = Result<Option<O::ReplyData>, Error>> + '_, Error> {
+        operation: O,
+    ) -> Result<impl Future<Output = Result<Option<O::ReplyData>, Error>>, Error> {
         let message_id = self.last_message_id.increment();
-        let request = rpc::Request::<O>::new(message_id, request);
-        let (tx, rx) = self.transport.split();
-        match self.requests.entry(message_id) {
+        let request = rpc::Request::<O>::new(message_id, operation);
+        #[allow(clippy::significant_drop_in_scrutinee)]
+        match self.requests.lock().await.entry(message_id) {
             Entry::Occupied(_) => return Err(Error::MessageIdCollision(message_id)),
             Entry::Vacant(entry) => {
-                request.send(tx).await?;
+                request.send(&mut *self.transport_tx.lock().await).await?;
                 _ = entry.insert(OutstandingRequest::Pending);
             }
         };
-        let requests = &mut self.requests;
+        let requests = self.requests.clone();
+        let rx = self.transport_rx.clone();
         let fut = async move {
             loop {
                 if let Some(partial) = requests
+                    .lock()
+                    .await
                     .get_mut(&message_id)
                     .ok_or_else(|| Error::RequestNotFound(message_id))?
                     .take()?
@@ -104,8 +114,11 @@ impl<T: Transport> Session<T> {
                     let reply: rpc::Reply<O> = partial.try_into()?;
                     break reply.into_result();
                 };
-                let reply = rpc::PartialReply::recv(rx).await?;
+                let reply = rpc::PartialReply::recv(&mut *rx.lock().await).await?;
+                #[allow(clippy::significant_drop_in_scrutinee)]
                 match requests
+                    .lock()
+                    .await
                     .get_mut(&reply.message_id())
                     .ok_or_else(|| Error::RequestNotFound(reply.message_id()))?
                 {
@@ -120,17 +133,5 @@ impl<T: Transport> Session<T> {
             }
         };
         Ok(fut)
-    }
-
-    #[tracing::instrument(skip(self))]
-    pub async fn send(&mut self, data: Bytes) -> Result<(), Error> {
-        tracing::debug!("trying to write to transport");
-        self.transport.send(data).await
-    }
-
-    #[tracing::instrument(skip(self))]
-    pub async fn recv(&mut self) -> Result<Bytes, Error> {
-        tracing::debug!("trying to read from transport");
-        self.transport.recv().await
     }
 }

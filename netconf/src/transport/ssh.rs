@@ -119,8 +119,8 @@ impl Transport for Ssh {
     type SendHandle = Sender;
     type RecvHandle = Receiver;
 
-    fn split(&mut self) -> (&mut Self::SendHandle, &mut Self::RecvHandle) {
-        (&mut self.out_queue, &mut self.in_queue)
+    fn split(self) -> (Self::SendHandle, Self::RecvHandle) {
+        (self.out_queue, self.in_queue)
     }
 }
 

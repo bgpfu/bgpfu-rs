@@ -91,15 +91,19 @@ pub mod get_config {
                 }
                 event => {
                     tracing::error!(?event, "unexpected xml event");
-                    return Err(crate::Error::XmlParse(None));
+                    return Err(crate::Error::UnexpectedXmlEvent(event.into_owned()));
                 }
             };
             tracing::debug!("expecting eof");
-            if matches!(reader.read_event()?, Event::Eof) {
-                tracing::debug!(?configuration);
-                Ok(Self { configuration })
-            } else {
-                Err(crate::Error::XmlParse(None))
+            match reader.read_event()? {
+                Event::Eof => {
+                    tracing::debug!(?configuration);
+                    Ok(Self { configuration })
+                }
+                event => {
+                    tracing::error!(?event, "unexpected xml event");
+                    Err(crate::Error::UnexpectedXmlEvent(event.into_owned()))
+                }
             }
         }
     }

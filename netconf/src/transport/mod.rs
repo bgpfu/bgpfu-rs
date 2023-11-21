@@ -16,7 +16,7 @@ pub trait Transport: Send {
     type SendHandle: SendHandle;
     type RecvHandle: RecvHandle;
 
-    fn split(&mut self) -> (&mut Self::SendHandle, &mut Self::RecvHandle);
+    fn split(self) -> (Self::SendHandle, Self::RecvHandle);
 }
 
 #[async_trait]
@@ -25,24 +25,8 @@ pub trait SendHandle: Send {
 }
 
 #[async_trait]
-impl<T: Transport> SendHandle for T {
-    async fn send(&mut self, data: Bytes) -> Result<(), Error> {
-        let (tx, _) = self.split();
-        tx.send(data).await
-    }
-}
-
-#[async_trait]
 pub trait RecvHandle: Send {
     async fn recv(&mut self) -> Result<Bytes, Error>;
-}
-
-#[async_trait]
-impl<T: Transport> RecvHandle for T {
-    async fn recv(&mut self) -> Result<Bytes, Error> {
-        let (_, rx) = self.split();
-        rx.recv().await
-    }
 }
 
 #[derive(Clone)]

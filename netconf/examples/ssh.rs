@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use clap::Parser;
 use clap_verbosity_flag::{Verbosity, WarnLevel};
 use simplelog::{ColorChoice, TermLogger, TerminalMode};
@@ -23,17 +23,19 @@ async fn main() -> anyhow::Result<()> {
     let mut session = Session::ssh(addr, args.username, args.password)
         .await
         .context("failed to establish netconf session")?;
-    println!("server capabilities:");
+    println!("negotiated capabilities:");
     session.capabilities().for_each(|capability| {
         println!("    {}", capability.uri());
     });
-    let config = session
-        .rpc(GetConfig::default())
-        .await?
-        .await?
-        .ok_or_else(|| anyhow!("expected config data"))?;
-    println!("{config}");
-    _ = session.rpc(CloseSession).await?.await?;
+    let (config, _) = tokio::try_join!(
+        session.rpc(GetConfig::default()).await?,
+        session.rpc(CloseSession).await?
+    )?;
+    if let Some(config) = config {
+        println!("{config}");
+    } else {
+        anyhow::bail!("expected config data")
+    };
     Ok(())
 }
 

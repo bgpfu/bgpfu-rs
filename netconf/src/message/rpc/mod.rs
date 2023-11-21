@@ -112,15 +112,15 @@ impl FromXml for PartialReply {
                 Event::Text(txt) if txt.as_ref() == MARKER => break,
                 event => {
                     tracing::error!(?event, "unexpected xml event");
-                    return Err(crate::Error::XmlParse(None));
+                    return Err(crate::Error::UnexpectedXmlEvent(event.into_owned()));
                 }
             }
         }
         Ok(Self {
-            message_id: message_id
-                .ok_or_else(|| Self::Error::MissingAttribute("rpc", "message-id"))?,
-            // TODO: This is a poor choice of error!
-            inner_buf: inner_buf.ok_or_else(|| Self::Error::XmlParse(None))?,
+            message_id: message_id.ok_or_else(|| crate::Error::NoMessageId)?,
+            // If `message_id` is `Some`, and we haven't already encountered an error, then
+            // `inner_buf` is also guaranteed to be `Some` here.
+            inner_buf: inner_buf.expect("inner_buf should be initialized"),
         })
     }
 }
@@ -161,7 +161,7 @@ impl<O: Operation> TryFrom<PartialReply> for Reply<O> {
 pub(crate) enum ReplyInner<D> {
     Ok,
     Data(D),
-    RpcError(RpcError),
+    RpcError(Error),
 }
 
 impl<D: FromXml + Debug> FromXml for ReplyInner<D> {
@@ -196,20 +196,24 @@ impl<D: FromXml + Debug> FromXml for ReplyInner<D> {
                 reader
                     .read_text(tag.to_end().name())
                     .map_err(crate::Error::from)
-                    .and_then(RpcError::from_xml)
+                    .and_then(Error::from_xml)
                     .map(Self::RpcError)?
             }
             event => {
                 tracing::error!(?event, "unexpected xml event");
-                return Err(crate::Error::XmlParse(None));
+                return Err(crate::Error::UnexpectedXmlEvent(event.into_owned()));
             }
         };
         tracing::debug!("expecting eof");
-        if matches!(reader.read_event()?, Event::Eof) {
-            tracing::debug!(?this);
-            Ok(this)
-        } else {
-            Err(crate::Error::XmlParse(None))
+        match reader.read_event()? {
+            Event::Eof => {
+                tracing::debug!(?this);
+                Ok(this)
+            }
+            event => {
+                tracing::error!(?event, "unexpected xml event");
+                Err(crate::Error::UnexpectedXmlEvent(event.into_owned()))
+            }
         }
     }
 }
@@ -229,9 +233,9 @@ impl FromXml for Empty {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RpcError;
+pub struct Error;
 
-impl FromXml for RpcError {
+impl FromXml for Error {
     type Error = crate::Error;
 
     fn from_xml<S>(_input: S) -> Result<Self, Self::Error>
@@ -242,13 +246,13 @@ impl FromXml for RpcError {
     }
 }
 
-impl fmt::Display for RpcError {
+impl fmt::Display for Error {
     fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
         todo!()
     }
 }
 
-impl std::error::Error for RpcError {}
+impl std::error::Error for Error {}
 
 #[cfg(test)]
 mod tests {

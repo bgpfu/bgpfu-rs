@@ -28,13 +28,13 @@ pub enum Error {
     DecodeMessage(#[from] std::str::Utf8Error),
 
     #[error("failed to parse xml document: {0:?}")]
-    XmlParse(#[from] Option<quick_xml::Error>),
+    XmlParse(#[from] quick_xml::Error),
+
+    #[error("unexpected event while parsing xml: {0:?}")]
+    UnexpectedXmlEvent(quick_xml::events::Event<'static>),
 
     #[error("missing '{1}' element while parsing '{0}' message")]
     MissingElement(&'static str, &'static str),
-
-    #[error("missing '{1}' attribute while parsing '{0}' message")]
-    MissingAttribute(&'static str, &'static str),
 
     #[error("message-id attribute missing in rpc-reply")]
     NoMessageId,
@@ -64,5 +64,5 @@ pub enum Error {
     RpcReplyDeserialization(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
 
     #[error("received rpc-error reply: {0}")]
-    RpcError(#[from] rpc::RpcError),
+    RpcError(#[from] rpc::Error),
 }
