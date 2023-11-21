@@ -1,8 +1,4 @@
-use std::{
-    convert::Infallible,
-    fmt::{self, Debug},
-    io::Write,
-};
+use std::{convert::Infallible, fmt::Debug, io::Write};
 
 use async_trait::async_trait;
 use quick_xml::{
@@ -11,6 +7,9 @@ use quick_xml::{
 };
 
 use super::{ClientMsg, FromXml, ServerMsg, ToXml, MARKER};
+
+pub mod error;
+pub use self::error::{Error, Errors};
 
 pub mod operation;
 pub use self::operation::Operation;
@@ -141,7 +140,7 @@ impl<O: Operation> Reply<O> {
         match self.inner {
             ReplyInner::Ok => Ok(None),
             ReplyInner::Data(data) => Ok(Some(data)),
-            ReplyInner::RpcError(err) => Err(err.into()),
+            ReplyInner::RpcError(errors) => Err(errors.into()),
         }
     }
 }
@@ -161,7 +160,7 @@ impl<O: Operation> TryFrom<PartialReply> for Reply<O> {
 pub(crate) enum ReplyInner<D> {
     Ok,
     Data(D),
-    RpcError(Error),
+    RpcError(Errors),
 }
 
 impl<D: FromXml + Debug> FromXml for ReplyInner<D> {
@@ -174,47 +173,49 @@ impl<D: FromXml + Debug> FromXml for ReplyInner<D> {
     {
         let mut reader = Reader::from_str(input.as_ref());
         _ = reader.trim_text(true);
+        let mut errors = Errors::new();
+        let mut this = None;
         tracing::debug!("expecting inner tag");
-        let this = match reader.read_event()? {
-            Event::Start(tag) if tag.name().as_ref() == b"data" => {
-                tracing::debug!(?tag);
-                reader
-                    .read_text(tag.to_end().name())
-                    .map_err(crate::Error::from)
-                    .and_then(|span| {
-                        D::from_xml(span)
-                            .map_err(|err| crate::Error::RpcReplyDeserialization(err.into()))
-                    })
-                    .map(Self::Data)?
-            }
-            Event::Empty(tag) if tag.name().as_ref() == b"ok" => {
-                tracing::debug!(?tag);
-                Self::Ok
-            }
-            Event::Start(tag) if tag.name().as_ref() == b"rpc-error" => {
-                tracing::debug!(?tag);
-                reader
-                    .read_text(tag.to_end().name())
-                    .map_err(crate::Error::from)
-                    .and_then(Error::from_xml)
-                    .map(Self::RpcError)?
-            }
-            event => {
-                tracing::error!(?event, "unexpected xml event");
-                return Err(crate::Error::UnexpectedXmlEvent(event.into_owned()));
-            }
-        };
-        tracing::debug!("expecting eof");
-        match reader.read_event()? {
-            Event::Eof => {
-                tracing::debug!(?this);
-                Ok(this)
-            }
-            event => {
-                tracing::error!(?event, "unexpected xml event");
-                Err(crate::Error::UnexpectedXmlEvent(event.into_owned()))
+        loop {
+            match reader.read_event()? {
+                Event::Start(tag)
+                    if tag.name().as_ref() == b"data" && this.is_none() && errors.is_empty() =>
+                {
+                    tracing::debug!(?tag);
+                    this = reader
+                        .read_text(tag.to_end().name())
+                        .map_err(crate::Error::from)
+                        .and_then(|span| {
+                            D::from_xml(span)
+                                .map_err(|err| crate::Error::RpcReplyDeserialization(err.into()))
+                        })
+                        .map(Self::Data)
+                        .map(Some)?;
+                }
+                Event::Empty(tag)
+                    if tag.name().as_ref() == b"ok" && this.is_none() && errors.is_empty() =>
+                {
+                    tracing::debug!(?tag);
+                    this = Some(Self::Ok);
+                }
+                Event::Start(tag) if tag.name().as_ref() == b"rpc-error" && this.is_none() => {
+                    tracing::debug!(?tag);
+                    let error = reader
+                        .read_text(tag.to_end().name())
+                        .map_err(crate::Error::from)
+                        .and_then(Error::from_xml)?;
+                    errors.push(error);
+                }
+                Event::Comment(_) => continue,
+                Event::Eof => break,
+                event => {
+                    tracing::error!(?event, "unexpected xml event");
+                    return Err(crate::Error::UnexpectedXmlEvent(event.into_owned()));
+                }
             }
         }
+        this.or_else(|| (!errors.is_empty()).then(|| Self::RpcError(errors)))
+            .ok_or_else(|| crate::Error::MissingElement("rpc-reply", "<data>/<ok>/<rpc-error>"))
     }
 }
 
@@ -231,28 +232,6 @@ impl FromXml for Empty {
         unreachable!()
     }
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Error;
-
-impl FromXml for Error {
-    type Error = crate::Error;
-
-    fn from_xml<S>(_input: S) -> Result<Self, Self::Error>
-    where
-        S: AsRef<str> + Debug,
-    {
-        todo!()
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!()
-    }
-}
-
-impl std::error::Error for Error {}
 
 #[cfg(test)]
 mod tests {

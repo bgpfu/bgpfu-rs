@@ -77,34 +77,33 @@ pub mod get_config {
     impl FromXml for Reply {
         type Error = Error;
 
+        #[tracing::instrument]
         fn from_xml<S>(input: S) -> Result<Self, Self::Error>
         where
             S: AsRef<str> + std::fmt::Debug,
         {
             let mut reader = Reader::from_str(input.as_ref());
             _ = reader.trim_text(true);
+            let mut configuration = None;
             tracing::debug!("expecting <configuration>");
-            let configuration = match reader.read_event()? {
-                Event::Start(tag) if tag.name().as_ref() == b"configuration" => {
-                    let span = reader.read_text(tag.to_end().name())?;
-                    span.as_ref().into()
-                }
-                event => {
-                    tracing::error!(?event, "unexpected xml event");
-                    return Err(crate::Error::UnexpectedXmlEvent(event.into_owned()));
-                }
-            };
-            tracing::debug!("expecting eof");
-            match reader.read_event()? {
-                Event::Eof => {
-                    tracing::debug!(?configuration);
-                    Ok(Self { configuration })
-                }
-                event => {
-                    tracing::error!(?event, "unexpected xml event");
-                    Err(crate::Error::UnexpectedXmlEvent(event.into_owned()))
+            loop {
+                match reader.read_event()? {
+                    Event::Start(tag) if tag.name().as_ref() == b"configuration" => {
+                        let span = reader.read_text(tag.to_end().name())?;
+                        configuration = Some(span.as_ref().into());
+                    }
+                    Event::Comment(_) => continue,
+                    Event::Eof => break,
+                    event => {
+                        tracing::error!(?event, "unexpected xml event");
+                        return Err(crate::Error::UnexpectedXmlEvent(event.into_owned()));
+                    }
                 }
             }
+            Ok(Self {
+                configuration: configuration
+                    .ok_or_else(|| Error::MissingElement("rpc-reply", "<configuration>"))?,
+            })
         }
     }
 

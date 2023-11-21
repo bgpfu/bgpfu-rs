@@ -64,5 +64,17 @@ pub enum Error {
     RpcReplyDeserialization(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
 
     #[error("received rpc-error reply: {0}")]
-    RpcError(#[from] rpc::Error),
+    RpcError(#[from] rpc::Errors),
+
+    #[error("encountered an unknown rpc-error error-type: {0}")]
+    UnknownErrorType(String),
+
+    #[error("encountered an unknown rpc-error error-tag: {0}")]
+    UnknownErrorTag(String),
+
+    #[error("encountered an unknown rpc-error error-severity: {0}")]
+    UnknownErrorSeverity(String),
+
+    #[error("encountered an unknown rpc-error error-info type: {0}")]
+    UnknownErrorInfo(String),
 }
