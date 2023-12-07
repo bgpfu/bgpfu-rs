@@ -5,9 +5,13 @@ use std::{
     sync::Arc,
 };
 
-use quick_xml::{events::Event, Reader};
+use quick_xml::{
+    events::{BytesStart, Event},
+    name::ResolveResult,
+    NsReader,
+};
 
-use super::FromXml;
+use super::{xmlns, ReadXml};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Errors {
@@ -51,16 +55,12 @@ pub struct Error {
     info: Info,
 }
 
-impl FromXml for Error {
+impl ReadXml for Error {
     type Error = crate::Error;
 
-    #[tracing::instrument]
-    fn from_xml<S>(input: S) -> Result<Self, Self::Error>
-    where
-        S: AsRef<str> + Debug,
-    {
-        let mut reader = Reader::from_str(input.as_ref());
-        _ = reader.trim_text(true);
+    #[tracing::instrument(skip(reader))]
+    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, Self::Error> {
+        let end = start.to_end();
         let mut error_type = None;
         let mut error_tag = None;
         let mut severity = None;
@@ -69,23 +69,37 @@ impl FromXml for Error {
         let mut message = None;
         let mut info = None;
         loop {
-            match reader.read_event()? {
-                Event::Start(tag)
-                    if tag.name().as_ref() == b"error-type" && error_type.is_none() =>
+            match reader.read_resolved_event()? {
+                (ResolveResult::Bound(ns), Event::Start(tag))
+                    if ns == xmlns::BASE
+                        && tag.local_name().as_ref() == b"error-type"
+                        && error_type.is_none() =>
                 {
+                    tracing::debug!(?tag);
                     error_type = Some(reader.read_text(tag.to_end().name())?.trim().parse()?);
                 }
-                Event::Start(tag) if tag.name().as_ref() == b"error-tag" && error_tag.is_none() => {
+                (ResolveResult::Bound(ns), Event::Start(tag))
+                    if ns == xmlns::BASE
+                        && tag.local_name().as_ref() == b"error-tag"
+                        && error_tag.is_none() =>
+                {
+                    tracing::debug!(?tag);
                     error_tag = Some(reader.read_text(tag.to_end().name())?.trim().parse()?);
                 }
-                Event::Start(tag)
-                    if tag.name().as_ref() == b"error-severity" && severity.is_none() =>
+                (ResolveResult::Bound(ns), Event::Start(tag))
+                    if ns == xmlns::BASE
+                        && tag.local_name().as_ref() == b"error-severity"
+                        && severity.is_none() =>
                 {
+                    tracing::debug!(?tag);
                     severity = Some(reader.read_text(tag.to_end().name())?.trim().parse()?);
                 }
-                Event::Start(tag)
-                    if tag.name().as_ref() == b"error-app-tag" && app_tag.is_none() =>
+                (ResolveResult::Bound(ns), Event::Start(tag))
+                    if ns == xmlns::BASE
+                        && tag.local_name().as_ref() == b"error-app-tag"
+                        && app_tag.is_none() =>
                 {
+                    tracing::debug!(?tag);
                     app_tag = Some(
                         reader
                             .read_text(tag.to_end().name())?
@@ -94,7 +108,12 @@ impl FromXml for Error {
                             .unwrap_or_else(|_| unreachable!()),
                     );
                 }
-                Event::Start(tag) if tag.name().as_ref() == b"error-path" && path.is_none() => {
+                (ResolveResult::Bound(ns), Event::Start(tag))
+                    if ns == xmlns::BASE
+                        && tag.local_name().as_ref() == b"error-path"
+                        && path.is_none() =>
+                {
+                    tracing::debug!(?tag);
                     path = Some(
                         reader
                             .read_text(tag.to_end().name())?
@@ -103,9 +122,12 @@ impl FromXml for Error {
                             .unwrap_or_else(|_| unreachable!()),
                     );
                 }
-                Event::Start(tag)
-                    if tag.name().as_ref() == b"error-message" && message.is_none() =>
+                (ResolveResult::Bound(ns), Event::Start(tag))
+                    if ns == xmlns::BASE
+                        && tag.local_name().as_ref() == b"error-message"
+                        && message.is_none() =>
                 {
+                    tracing::debug!(?tag);
                     message = Some(
                         reader
                             .read_text(tag.to_end().name())?
@@ -114,13 +136,18 @@ impl FromXml for Error {
                             .unwrap_or_else(|_| unreachable!()),
                     );
                 }
-                Event::Start(tag) if tag.name().as_ref() == b"error-info" && info.is_none() => {
-                    info = Some(Info::from_xml(reader.read_text(tag.to_end().name())?)?);
+                (ResolveResult::Bound(ns), Event::Start(tag))
+                    if ns == xmlns::BASE
+                        && tag.local_name().as_ref() == b"error-info"
+                        && info.is_none() =>
+                {
+                    tracing::debug!(?tag);
+                    info = Some(Info::read_xml(reader, &tag)?);
                 }
-                Event::Comment(_) => continue,
-                Event::Eof => break,
-                event => {
-                    tracing::error!(?event, "unexpected xml event");
+                (_, Event::Comment(_)) => continue,
+                (_, Event::End(tag)) if tag == end => break,
+                (ns, event) => {
+                    tracing::error!(?event, ?ns, "unexpected xml event");
                     return Err(crate::Error::UnexpectedXmlEvent(event.into_owned()));
                 }
             }
@@ -353,49 +380,48 @@ impl Info {
     }
 }
 
-impl FromXml for Info {
+impl ReadXml for Info {
     type Error = crate::Error;
 
-    #[tracing::instrument]
-    fn from_xml<S>(input: S) -> Result<Self, Self::Error>
-    where
-        S: AsRef<str> + Debug,
-    {
-        let mut reader = Reader::from_str(input.as_ref());
-        _ = reader.trim_text(true);
+    #[tracing::instrument(skip(reader))]
+    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, Self::Error> {
+        let end = start.to_end();
         let mut inner = Vec::new();
+        tracing::debug!("expecting error-info element");
         loop {
-            match reader.read_event()? {
-                Event::Start(tag) => match tag.name().as_ref() {
-                    b"bad-attribute" => inner.push(InfoElement::BadAttribute(
-                        reader.read_text(tag.to_end().name())?.as_ref().into(),
-                    )),
-                    b"bad-element" => inner.push(InfoElement::BadElement(
-                        reader.read_text(tag.to_end().name())?.as_ref().into(),
-                    )),
-                    b"bad-namespace" => inner.push(InfoElement::BadNamespace(
-                        reader.read_text(tag.to_end().name())?.as_ref().into(),
-                    )),
-                    b"session-id" => inner.push(InfoElement::SessionId(
-                        reader.read_text(tag.to_end().name())?.as_ref().parse()?,
-                    )),
-                    b"ok-element" => inner.push(InfoElement::OkElement(
-                        reader.read_text(tag.to_end().name())?.as_ref().into(),
-                    )),
-                    b"err-element" => inner.push(InfoElement::ErrElement(
-                        reader.read_text(tag.to_end().name())?.as_ref().into(),
-                    )),
-                    b"noop-element" => inner.push(InfoElement::NoopElement(
-                        reader.read_text(tag.to_end().name())?.as_ref().into(),
-                    )),
-                    name => {
-                        return Err(Self::Error::UnknownErrorInfo(from_utf8(name)?.to_string()))
+            match reader.read_resolved_event()? {
+                (ResolveResult::Bound(ns), Event::Start(tag)) if ns == xmlns::BASE => {
+                    match tag.name().as_ref() {
+                        b"bad-attribute" => inner.push(InfoElement::BadAttribute(
+                            reader.read_text(tag.to_end().name())?.as_ref().into(),
+                        )),
+                        b"bad-element" => inner.push(InfoElement::BadElement(
+                            reader.read_text(tag.to_end().name())?.as_ref().into(),
+                        )),
+                        b"bad-namespace" => inner.push(InfoElement::BadNamespace(
+                            reader.read_text(tag.to_end().name())?.as_ref().into(),
+                        )),
+                        b"session-id" => inner.push(InfoElement::SessionId(
+                            reader.read_text(tag.to_end().name())?.as_ref().parse()?,
+                        )),
+                        b"ok-element" => inner.push(InfoElement::OkElement(
+                            reader.read_text(tag.to_end().name())?.as_ref().into(),
+                        )),
+                        b"err-element" => inner.push(InfoElement::ErrElement(
+                            reader.read_text(tag.to_end().name())?.as_ref().into(),
+                        )),
+                        b"noop-element" => inner.push(InfoElement::NoopElement(
+                            reader.read_text(tag.to_end().name())?.as_ref().into(),
+                        )),
+                        name => {
+                            return Err(Self::Error::UnknownErrorInfo(from_utf8(name)?.to_string()))
+                        }
                     }
-                },
-                Event::Comment(_) => continue,
-                Event::Eof => break,
-                event => {
-                    tracing::error!(?event, "unexpected xml event");
+                }
+                (_, Event::Comment(_)) => continue,
+                (_, Event::End(tag)) if tag == end => break,
+                (ns, event) => {
+                    tracing::error!(?event, ?ns, "unexpected xml event");
                     return Err(crate::Error::UnexpectedXmlEvent(event.into_owned()));
                 }
             }
@@ -425,7 +451,7 @@ mod tests {
     use super::*;
     use crate::message::{
         rpc::{Empty, MessageId, Operation, PartialReply, Reply, ReplyInner},
-        ToXml,
+        ServerMsg, ToXml,
     };
 
     #[derive(Debug, PartialEq)]

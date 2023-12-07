@@ -1,12 +1,12 @@
-use std::{convert::Infallible, fmt::Debug, io::Write};
+use std::{convert::Infallible, fmt::Debug, io::Write, str::from_utf8};
 
-use async_trait::async_trait;
 use quick_xml::{
-    events::{attributes::Attribute, Event},
-    Reader, Writer,
+    events::{attributes::Attribute, BytesStart, Event},
+    name::{Namespace, ResolveResult},
+    NsReader, Writer,
 };
 
-use super::{ClientMsg, FromXml, ServerMsg, ToXml, MARKER};
+use super::{xmlns, ClientMsg, ReadXml, ServerMsg, ToXml, MARKER};
 
 pub mod error;
 pub use self::error::{Error, Errors};
@@ -68,7 +68,7 @@ impl<O: Operation> ClientMsg for Request<O> {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PartialReply {
     message_id: MessageId,
-    inner_buf: Box<str>,
+    buf: Box<str>,
 }
 
 impl PartialReply {
@@ -77,55 +77,62 @@ impl PartialReply {
     }
 }
 
-impl FromXml for PartialReply {
-    type Error = crate::Error;
+impl ServerMsg for PartialReply {
+    const TAG_NS: Namespace<'static> = xmlns::BASE;
+    const TAG_NAME: &'static str = "rpc-reply";
 
-    #[tracing::instrument]
-    fn from_xml<S>(input: S) -> Result<Self, Self::Error>
+    // TODO:
+    // This is a hack - we need to find a way to save the buffer without resorting to this trick
+    // of calling `read_xml` with a dummy start tag
+    #[tracing::instrument(skip(input))]
+    fn from_xml<S>(input: S) -> Result<Self, crate::Error>
     where
         S: AsRef<str> + Debug,
     {
-        let mut reader = Reader::from_str(input.as_ref());
+        tracing::debug!(?input);
+        let mut reader = NsReader::from_str(input.as_ref());
         _ = reader.trim_text(true);
-        let (mut message_id, mut inner_buf) = (None, None);
-        tracing::debug!("expecting <rpc-reply>");
+        Self::read_xml(&mut reader, &BytesStart::new("dummy"))
+    }
+}
+
+impl ReadXml for PartialReply {
+    type Error = crate::Error;
+
+    #[tracing::instrument(skip(reader))]
+    fn read_xml(reader: &mut NsReader<&[u8]>, _: &BytesStart<'_>) -> Result<Self, Self::Error> {
+        let buf = from_utf8(reader.get_ref())?.into();
+        tracing::debug!("expecting <{}>", Self::TAG_NAME);
+        let mut message_id = None;
         loop {
-            match reader.read_event()? {
-                Event::Start(tag) if tag.name().as_ref() == b"rpc-reply" => {
+            match reader.read_resolved_event()? {
+                (ResolveResult::Bound(ns), Event::Start(tag))
+                    if ns == Self::TAG_NS
+                        && tag.local_name().as_ref() == Self::TAG_NAME.as_bytes() =>
+                {
+                    let end = tag.to_end();
                     tracing::debug!("trying to parse message-id");
-                    message_id = Some(
-                        tag.try_get_attribute("message-id")?
-                            .ok_or_else(|| crate::Error::NoMessageId)
-                            .and_then(MessageId::try_from)?,
-                    );
-                    inner_buf = Some(
-                        reader
-                            .read_text(tag.to_end().name())?
-                            .as_ref()
-                            .trim()
-                            .into(),
-                    );
+                    message_id = tag
+                        .try_get_attribute("message-id")?
+                        .map(MessageId::try_from)
+                        .transpose()?;
+                    _ = reader.read_to_end(end.name());
                 }
-                Event::Comment(_) => continue,
-                Event::Eof => break,
-                Event::Text(txt) if txt.as_ref() == MARKER => break,
-                event => {
-                    tracing::error!(?event, "unexpected xml event");
+                (_, Event::Comment(_)) => continue,
+                (_, Event::Eof) => break,
+                (_, Event::Text(txt)) if &*txt == MARKER => break,
+                (ns, event) => {
+                    tracing::error!(?event, ?ns, "unexpected xml event");
                     return Err(crate::Error::UnexpectedXmlEvent(event.into_owned()));
                 }
             }
         }
         Ok(Self {
             message_id: message_id.ok_or_else(|| crate::Error::NoMessageId)?,
-            // If `message_id` is `Some`, and we haven't already encountered an error, then
-            // `inner_buf` is also guaranteed to be `Some` here.
-            inner_buf: inner_buf.expect("inner_buf should be initialized"),
+            buf,
         })
     }
 }
-
-#[async_trait]
-impl ServerMsg for PartialReply {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Reply<O: Operation> {
@@ -145,14 +152,39 @@ impl<O: Operation> Reply<O> {
     }
 }
 
+impl<O: Operation> ReadXml for Reply<O> {
+    type Error = crate::Error;
+
+    #[tracing::instrument(skip(reader))]
+    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, Self::Error> {
+        tracing::debug!("trying to parse message-id");
+        let message_id = start
+            .try_get_attribute("message-id")?
+            .ok_or_else(|| crate::Error::NoMessageId)
+            .and_then(MessageId::try_from)?;
+        let inner = ReplyInner::read_xml(reader, start)?;
+        Ok(Self { message_id, inner })
+    }
+}
+
+impl<O: Operation> ServerMsg for Reply<O> {
+    const TAG_NS: Namespace<'static> = xmlns::BASE;
+    const TAG_NAME: &'static str = "rpc-reply";
+}
+
 impl<O: Operation> TryFrom<PartialReply> for Reply<O> {
     type Error = crate::Error;
 
-    #[tracing::instrument]
+    #[tracing::instrument(err, level = "debug")]
     fn try_from(value: PartialReply) -> Result<Self, Self::Error> {
-        let message_id = value.message_id;
-        let inner = ReplyInner::from_xml(value.inner_buf)?;
-        Ok(Self { message_id, inner })
+        let this = Self::from_xml(&value.buf)?;
+        if this.message_id != value.message_id {
+            return Err(crate::Error::MessageIdMismatch(
+                this.message_id,
+                value.message_id,
+            ));
+        };
+        Ok(this)
     }
 }
 
@@ -163,53 +195,50 @@ pub(crate) enum ReplyInner<D> {
     RpcError(Errors),
 }
 
-impl<D: FromXml + Debug> FromXml for ReplyInner<D> {
+impl<D: ReadXml> ReadXml for ReplyInner<D> {
     type Error = crate::Error;
 
-    #[tracing::instrument]
-    fn from_xml<S>(input: S) -> Result<Self, Self::Error>
-    where
-        S: AsRef<str> + Debug,
-    {
-        let mut reader = Reader::from_str(input.as_ref());
-        _ = reader.trim_text(true);
+    #[tracing::instrument(skip(reader))]
+    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, Self::Error> {
+        let end = start.to_end();
         let mut errors = Errors::new();
         let mut this = None;
-        tracing::debug!("expecting inner tag");
+        tracing::debug!("expecting <ok>, <data> or <rpc-error>");
         loop {
-            match reader.read_event()? {
-                Event::Start(tag)
-                    if tag.name().as_ref() == b"data" && this.is_none() && errors.is_empty() =>
+            match reader.read_resolved_event()? {
+                (ResolveResult::Bound(ns), Event::Start(tag))
+                    if ns == xmlns::BASE
+                        && tag.local_name().as_ref() == b"data"
+                        && this.is_none()
+                        && errors.is_empty() =>
                 {
                     tracing::debug!(?tag);
-                    this = reader
-                        .read_text(tag.to_end().name())
-                        .map_err(crate::Error::from)
-                        .and_then(|span| {
-                            D::from_xml(span)
-                                .map_err(|err| crate::Error::RpcReplyDeserialization(err.into()))
-                        })
-                        .map(Self::Data)
-                        .map(Some)?;
+                    this = Some(Self::Data(
+                        D::read_xml(reader, &tag)
+                            .map_err(|err| crate::Error::ReadXml(err.into()))?,
+                    ));
                 }
-                Event::Empty(tag)
-                    if tag.name().as_ref() == b"ok" && this.is_none() && errors.is_empty() =>
+                (ResolveResult::Bound(ns), Event::Empty(tag))
+                    if ns == xmlns::BASE
+                        && tag.local_name().as_ref() == b"ok"
+                        && this.is_none()
+                        && errors.is_empty() =>
                 {
                     tracing::debug!(?tag);
                     this = Some(Self::Ok);
                 }
-                Event::Start(tag) if tag.name().as_ref() == b"rpc-error" && this.is_none() => {
+                (ResolveResult::Bound(ns), Event::Start(tag))
+                    if ns == xmlns::BASE
+                        && tag.local_name().as_ref() == b"rpc-error"
+                        && this.is_none() =>
+                {
                     tracing::debug!(?tag);
-                    let error = reader
-                        .read_text(tag.to_end().name())
-                        .map_err(crate::Error::from)
-                        .and_then(Error::from_xml)?;
-                    errors.push(error);
+                    errors.push(Error::read_xml(reader, &tag)?);
                 }
-                Event::Comment(_) => continue,
-                Event::Eof => break,
-                event => {
-                    tracing::error!(?event, "unexpected xml event");
+                (_, Event::Comment(_)) => continue,
+                (_, Event::End(tag)) if tag == end => break,
+                (ns, event) => {
+                    tracing::error!(?event, ?ns, "unexpected xml event");
                     return Err(crate::Error::UnexpectedXmlEvent(event.into_owned()));
                 }
             }
@@ -222,13 +251,10 @@ impl<D: FromXml + Debug> FromXml for ReplyInner<D> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Empty {}
 
-impl FromXml for Empty {
+impl ReadXml for Empty {
     type Error = Infallible;
 
-    fn from_xml<S>(_: S) -> Result<Self, Self::Error>
-    where
-        S: AsRef<str> + Debug,
-    {
+    fn read_xml(_: &mut NsReader<&[u8]>, _: &BytesStart<'_>) -> Result<Self, Self::Error> {
         unreachable!()
     }
 }
@@ -265,14 +291,16 @@ mod tests {
             message_id: MessageId(101),
             operation: Foo { foo: "bar" },
         };
-        let expect = r#"<rpc message-id="101"><foo>bar</foo></rpc>"#;
+        let expect = r#"<rpc message-id="101"><foo>bar</foo></rpc>]]>]]>"#;
         assert_eq!(req.to_xml().unwrap(), expect);
     }
 
     #[test]
     fn deserialize_foo_reply() {
         let data = r#"
-            <rpc-reply message-id="101">
+            <rpc-reply
+                message-id="101"
+                xmlns="urn:ietf:params:xml:ns:netconf:base:1.0">
                 <ok/>
             </rpc-reply>
         "#;
@@ -289,15 +317,149 @@ mod tests {
     }
 
     #[test]
+    fn deserialize_foo_reply_with_xmlns() {
+        let data = r#"
+            <nc:rpc-reply
+                message-id="101"
+                xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0"
+                xmlns:junos="http://xml.juniper.net/junos/23.1R0/junos">
+                <nc:ok/>
+            </nc:rpc-reply>
+            ]]>]]>
+        "#;
+        let expect: Reply<Foo> = Reply {
+            message_id: MessageId(101),
+            inner: ReplyInner::Ok,
+        };
+        assert_eq!(
+            expect,
+            PartialReply::from_xml(data)
+                .and_then(Reply::try_from)
+                .unwrap()
+        );
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct Bar;
+
+    impl ToXml for Bar {
+        type Error = crate::Error;
+
+        fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+            _ = Writer::new(writer).create_element("bar").write_empty()?;
+            Ok(())
+        }
+    }
+
+    impl Operation for Bar {
+        type ReplyData = BarReply;
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct BarReply(usize);
+
+    impl ReadXml for BarReply {
+        type Error = crate::Error;
+
+        fn read_xml(
+            reader: &mut NsReader<&[u8]>,
+            start: &BytesStart<'_>,
+        ) -> Result<Self, Self::Error> {
+            let end = start.to_end();
+            let mut result = None;
+            loop {
+                match reader.read_resolved_event()? {
+                    (ResolveResult::Bound(ns), Event::Start(tag))
+                        if ns == Namespace(b"bar")
+                            && tag.local_name().as_ref() == b"result"
+                            && result.is_none() =>
+                    {
+                        result = Some(reader.read_text(tag.to_end().name())?.parse()?);
+                    }
+                    (_, Event::Comment(_)) => continue,
+                    (_, Event::End(tag)) if tag == end => break,
+                    (ns, event) => {
+                        tracing::error!(?event, ?ns, "unexpected xml event");
+                        return Err(crate::Error::UnexpectedXmlEvent(event.into_owned()));
+                    }
+                }
+            }
+            Ok(Self(result.ok_or_else(|| {
+                crate::Error::MissingElement("rpc-reply", "<result>")
+            })?))
+        }
+    }
+
+    #[test]
+    fn serialize_bar_request() {
+        let req = Request {
+            message_id: MessageId(101),
+            operation: Bar,
+        };
+        let expect = r#"<rpc message-id="101"><bar/></rpc>]]>]]>"#;
+        assert_eq!(req.to_xml().unwrap(), expect);
+    }
+
+    #[test]
+    fn deserialize_bar_reply() {
+        let data = r#"
+            <rpc-reply
+                message-id="101"
+                xmlns="urn:ietf:params:xml:ns:netconf:base:1.0">
+                <data>
+                    <result xmlns="bar">99</result>
+                </data>
+            </rpc-reply>
+        "#;
+        let expect: Reply<Bar> = Reply {
+            message_id: MessageId(101),
+            inner: ReplyInner::Data(BarReply(99)),
+        };
+        assert_eq!(
+            expect,
+            PartialReply::from_xml(data)
+                .and_then(Reply::try_from)
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn deserialize_bar_reply_with_xmlns() {
+        let data = r#"
+            <nc:rpc-reply
+                message-id="101"
+                xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0"
+                xmlns:junos="http://xml.juniper.net/junos/23.1R0/junos">
+                <nc:data>
+                    <bar:result xmlns:bar="bar">99</bar:result>
+                </nc:data>
+            </nc:rpc-reply>
+            ]]>]]>
+        "#;
+        let expect: Reply<Bar> = Reply {
+            message_id: MessageId(101),
+            inner: ReplyInner::Data(BarReply(99)),
+        };
+        assert_eq!(
+            expect,
+            PartialReply::from_xml(data)
+                .and_then(Reply::try_from)
+                .unwrap()
+        );
+    }
+
+    #[test]
     fn deserialize_ok_partial_reply() {
         let data = r#"
-            <rpc-reply message-id="101">
+            <rpc-reply
+                message-id="101"
+                xmlns="urn:ietf:params:xml:ns:netconf:base:1.0">
                 <ok/>
             </rpc-reply>
         "#;
         let expect = PartialReply {
             message_id: MessageId(101),
-            inner_buf: "<ok/>".into(),
+            buf: data.into(),
         };
         assert_eq!(expect, PartialReply::from_xml(data).unwrap());
     }
@@ -305,13 +467,15 @@ mod tests {
     #[test]
     fn deserialize_data_partial_reply() {
         let data = r#"
-            <rpc-reply message-id="101">
+            <rpc-reply
+                message-id="101"
+                xmlns="urn:ietf:params:xml:ns:netconf:base:1.0">
                 <data><foo/></data>
             </rpc-reply>
         "#;
         let expect = PartialReply {
             message_id: MessageId(101),
-            inner_buf: "<data><foo/></data>".into(),
+            buf: data.into(),
         };
         assert_eq!(expect, PartialReply::from_xml(data).unwrap());
     }

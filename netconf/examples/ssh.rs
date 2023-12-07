@@ -4,7 +4,7 @@ use clap_verbosity_flag::{Verbosity, WarnLevel};
 use simplelog::{ColorChoice, TermLogger, TerminalMode};
 
 use netconf::{
-    message::rpc::operation::{close_session::CloseSession, get_config::GetConfig},
+    message::rpc::operation::get_config::{GetConfig, Source},
     transport::Password,
     Session,
 };
@@ -28,8 +28,13 @@ async fn main() -> anyhow::Result<()> {
         println!("    {}", capability.uri());
     });
     let (config, _) = tokio::try_join!(
-        session.rpc(GetConfig::default()).await?,
-        session.rpc(CloseSession).await?
+        session
+            .rpc(GetConfig::new(
+                Source::Running,
+                Some("<configuration><system/></configuration>".to_string())
+            ))
+            .await?,
+        session.close().await?
     )?;
     if let Some(config) = config {
         println!("{config}");

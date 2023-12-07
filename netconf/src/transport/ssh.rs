@@ -11,7 +11,7 @@ use russh_keys::key::PublicKey;
 use tokio::{net::ToSocketAddrs, sync::mpsc, task::JoinHandle};
 
 use super::{Password, RecvHandle, SendHandle, Transport};
-use crate::Error;
+use crate::{message::MARKER, Error};
 
 #[derive(Debug)]
 pub struct Ssh {
@@ -59,7 +59,7 @@ impl Ssh {
         let in_queue = Receiver { inner: in_queue_rx };
         let task = tokio::spawn(async move {
             let mut in_buf = BytesMut::new();
-            let message_break = Finder::new(b"]]>]]>");
+            let message_break = Finder::new(MARKER);
             loop {
                 tokio::select! {
                     to_send = out_queue_rx.recv() => {
@@ -84,9 +84,9 @@ impl Ssh {
                                     in_buf.extend_from_slice(&data);
                                     tracing::debug!("checking for message break marker");
                                     if let Some(index) = message_break.find(&in_buf) {
-                                        let end  = index + 6;
+                                        let end  = index + MARKER.len();
                                         tracing::info!("splitting {end} message bytes from input buffer");
-                                        let message = in_buf.split_to(index + 6).freeze();
+                                        let message = in_buf.split_to(end).freeze();
                                         in_queue_tx.send(message).await?;
                                         tracing::debug!("message data enqueued sucessfully");
                                     };
@@ -119,6 +119,7 @@ impl Transport for Ssh {
     type SendHandle = Sender;
     type RecvHandle = Receiver;
 
+    #[tracing::instrument(level = "debug")]
     fn split(self) -> (Self::SendHandle, Self::RecvHandle) {
         (self.out_queue, self.in_queue)
     }
@@ -131,6 +132,7 @@ pub struct Sender {
 
 #[async_trait]
 impl SendHandle for Sender {
+    #[tracing::instrument(level = "trace")]
     async fn send(&mut self, data: Bytes) -> Result<(), Error> {
         Ok(self.inner.send(data).await?)
     }
@@ -143,6 +145,7 @@ pub struct Receiver {
 
 #[async_trait]
 impl RecvHandle for Receiver {
+    #[tracing::instrument(level = "trace")]
     async fn recv(&mut self) -> Result<Bytes, Error> {
         self.inner
             .recv()

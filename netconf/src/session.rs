@@ -10,7 +10,8 @@ use tokio::{net::ToSocketAddrs, sync::Mutex};
 
 use crate::{
     message::{
-        rpc, Capabilities, Capability, ClientHello, ClientMsg, ServerHello, ServerMsg, BASE,
+        rpc::{self, operation::close_session::CloseSession},
+        Capabilities, Capability, ClientHello, ClientMsg, ServerHello, ServerMsg, BASE,
     },
     transport::{Password, Ssh, Transport},
     Error,
@@ -34,7 +35,7 @@ enum OutstandingRequest {
 }
 
 impl OutstandingRequest {
-    #[tracing::instrument]
+    #[tracing::instrument(level = "debug")]
     fn take(&mut self) -> Result<Option<rpc::PartialReply>, Error> {
         match mem::replace(self, Self::Complete) {
             mut pending @ Self::Pending => {
@@ -91,7 +92,7 @@ impl<T: Transport> Session<T> {
         operation: O,
     ) -> Result<impl Future<Output = Result<Option<O::ReplyData>, Error>>, Error> {
         let message_id = self.last_message_id.increment();
-        let request = rpc::Request::<O>::new(message_id, operation);
+        let request = rpc::Request::new(message_id, operation);
         #[allow(clippy::significant_drop_in_scrutinee)]
         match self.requests.lock().await.entry(message_id) {
             Entry::Occupied(_) => return Err(Error::MessageIdCollision(message_id)),
@@ -133,5 +134,12 @@ impl<T: Transport> Session<T> {
             }
         };
         Ok(fut)
+    }
+
+    #[tracing::instrument(skip(self))]
+    pub async fn close(mut self) -> Result<impl Future<Output = Result<(), Error>>, Error> {
+        self.rpc(CloseSession)
+            .await
+            .map(|fut| async move { fut.await.map(|_| drop(self)) })
     }
 }

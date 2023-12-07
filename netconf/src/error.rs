@@ -30,6 +30,9 @@ pub enum Error {
     #[error("failed to parse xml document: {0:?}")]
     XmlParse(#[from] quick_xml::Error),
 
+    #[error("error while reading xml")]
+    ReadXml(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
+
     #[error("unexpected event while parsing xml: {0:?}")]
     UnexpectedXmlEvent(quick_xml::events::Event<'static>),
 

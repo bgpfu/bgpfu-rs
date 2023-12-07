@@ -6,13 +6,14 @@ use std::{
 };
 
 use quick_xml::{
-    events::{BytesText, Event},
-    Reader, Writer,
+    events::{BytesStart, BytesText, Event},
+    name::{Namespace, ResolveResult},
+    NsReader, Writer,
 };
 
 use crate::Error;
 
-use super::{ClientMsg, FromXml, ServerMsg, ToXml, MARKER};
+use super::{xmlns, ClientMsg, ReadXml, ServerMsg, ToXml};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ServerHello {
@@ -26,59 +27,41 @@ impl ServerHello {
     }
 }
 
-impl FromXml for ServerHello {
+impl ReadXml for ServerHello {
     type Error = Error;
 
-    #[tracing::instrument]
-    fn from_xml<S>(input: S) -> Result<Self, Self::Error>
-    where
-        S: AsRef<str> + Debug,
-    {
-        let mut reader = Reader::from_str(input.as_ref());
-        _ = reader.trim_text(true);
+    #[tracing::instrument(skip(reader))]
+    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, Self::Error> {
+        let end = start.to_end();
         let (mut capabilities, mut session_id) = (None, None);
-        tracing::debug!("expecting <hello>");
+        tracing::debug!("expecting <capabilities> or <session-id>");
         loop {
-            match reader.read_event()? {
-                Event::Start(tag) if tag.name().as_ref() == b"hello" => {
-                    let span = reader.read_text(tag.to_end().name())?;
-                    let mut reader = Reader::from_str(span.as_ref());
-                    _ = reader.trim_text(true);
-                    tracing::debug!("expecting <capabilities> or <session-id>");
-                    loop {
-                        match reader.read_event()? {
-                            Event::Start(tag)
-                                if tag.name().as_ref() == b"capabilities"
-                                    && capabilities.is_none() =>
-                            {
-                                let span = reader.read_text(tag.to_end().name())?;
-                                println!("trying to deserialize capabilities");
-                                capabilities = Some(Capabilities::from_xml(span)?);
-                            }
-                            Event::Start(tag)
-                                if tag.name().as_ref() == b"session-id" && session_id.is_none() =>
-                            {
-                                let span = reader.read_text(tag.to_end().name())?;
-                                session_id = Some(span.parse()?);
-                            }
-                            Event::Eof => break,
-                            event => {
-                                tracing::error!(?event, "unexpected xml event");
-                                return Err(Error::UnexpectedXmlEvent(event.into_owned()));
-                            }
-                        };
-                    }
+            match reader.read_resolved_event()? {
+                (ResolveResult::Bound(ns), Event::Start(tag))
+                    if ns == xmlns::BASE
+                        && tag.local_name().as_ref() == b"capabilities"
+                        && capabilities.is_none() =>
+                {
+                    tracing::debug!("trying to deserialize capabilities");
+                    capabilities = Some(Capabilities::read_xml(reader, &tag)?);
                 }
-                Event::Comment(_) => {
+                (ResolveResult::Bound(ns), Event::Start(tag))
+                    if ns == xmlns::BASE
+                        && tag.local_name().as_ref() == b"session-id"
+                        && session_id.is_none() =>
+                {
+                    let span = reader.read_text(tag.to_end().name())?;
+                    session_id = Some(span.parse()?);
+                }
+                (_, Event::Comment(_)) => {
                     continue;
                 }
-                Event::Eof => break,
-                Event::Text(txt) if txt.as_ref() == MARKER => break,
-                event => {
-                    tracing::error!(?event, "unexpected xml event");
+                (_, Event::End(tag)) if tag == end => break,
+                (ns, event) => {
+                    tracing::error!(?event, ?ns, "unexpected xml event");
                     return Err(Error::UnexpectedXmlEvent(event.into_owned()));
                 }
-            }
+            };
         }
         Ok(Self {
             capabilities: capabilities
@@ -88,7 +71,10 @@ impl FromXml for ServerHello {
     }
 }
 
-impl ServerMsg for ServerHello {}
+impl ServerMsg for ServerHello {
+    const TAG_NAME: &'static str = "hello";
+    const TAG_NS: Namespace<'static> = xmlns::BASE;
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ClientHello {
@@ -96,12 +82,14 @@ pub(crate) struct ClientHello {
 }
 
 impl ClientHello {
+    #[tracing::instrument(level = "debug")]
     pub(crate) fn new(capabilities: &[Capability]) -> Self {
         Self {
             capabilities: capabilities.iter().cloned().collect(),
         }
     }
 
+    #[tracing::instrument(err, level = "debug")]
     pub(crate) fn common_capabilities(
         &self,
         server_hello: &ServerHello,
@@ -143,30 +131,26 @@ impl Capabilities {
         self.inner.iter()
     }
 
+    #[tracing::instrument(ret)]
     pub(crate) fn contains(&self, elem: &Capability) -> bool {
         self.inner.contains(elem)
     }
-}
 
-impl FromXml for Capabilities {
-    type Error = Error;
-
-    fn from_xml<S>(input: S) -> Result<Self, Self::Error>
-    where
-        S: AsRef<str> + Debug,
-    {
-        let mut reader = Reader::from_str(input.as_ref());
-        _ = reader.trim_text(true);
+    #[tracing::instrument(skip(reader))]
+    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, Error> {
         let mut inner = HashSet::new();
+        let end = start.to_end();
         loop {
-            match reader.read_event()? {
-                Event::Start(tag) if tag.name().as_ref() == b"capability" => {
+            match reader.read_resolved_event()? {
+                (ResolveResult::Bound(ns), Event::Start(tag))
+                    if ns == xmlns::BASE && tag.local_name().as_ref() == b"capability" =>
+                {
                     let span = reader.read_text(tag.to_end().name())?;
                     _ = inner.insert(Capability::new(span.to_string()));
                 }
-                Event::Eof => break,
-                event => {
-                    tracing::error!(?event, "unexpected xml event");
+                (_, Event::End(tag)) if tag == end => break,
+                (ns, event) => {
+                    tracing::error!(?event, ?ns, "unexpected xml event");
                     return Err(Error::UnexpectedXmlEvent(event.into_owned()));
                 }
             }
@@ -208,7 +192,8 @@ pub struct Capability {
 
 impl Capability {
     #[must_use]
-    pub const fn new(uri: String) -> Self {
+    #[tracing::instrument(level = "debug")]
+    pub fn new(uri: String) -> Self {
         Self {
             uri: Cow::Owned(uri),
         }
@@ -303,13 +288,78 @@ mod tests {
     }
 
     #[test]
+    fn server_hello_with_xmlns_from_xml() {
+        let xml = r#"
+            <nc:hello xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0">
+               <nc:capabilities>
+                <nc:capability>urn:ietf:params:netconf:base:1.0</nc:capability>
+                <nc:capability>urn:ietf:params:netconf:capability:candidate:1.0</nc:capability>
+                <nc:capability>urn:ietf:params:netconf:capability:confirmed-commit:1.0</nc:capability>
+                <nc:capability>urn:ietf:params:netconf:capability:validate:1.0</nc:capability>
+                <nc:capability>urn:ietf:params:netconf:capability:url:1.0?scheme=http,ftp,file</nc:capability>
+                <nc:capability>urn:ietf:params:xml:ns:netconf:base:1.0?module=ietf-netconf&amp;revision=2011-06-01</nc:capability>
+                <nc:capability>urn:ietf:params:xml:ns:netconf:capability:candidate:1.0</nc:capability>
+                <nc:capability>urn:ietf:params:xml:ns:netconf:capability:confirmed-commit:1.0</nc:capability>
+                <nc:capability>urn:ietf:params:xml:ns:netconf:capability:validate:1.0</nc:capability>
+                <nc:capability>urn:ietf:params:xml:ns:netconf:capability:url:1.0?scheme=http,ftp,file</nc:capability>
+                <nc:capability>urn:ietf:params:xml:ns:yang:ietf-inet-types?module=ietf-inet-types&amp;revision=2013-07-15</nc:capability>
+                <nc:capability>urn:ietf:params:xml:ns:yang:ietf-yang-metadata?module=ietf-yang-metadata&amp;revision=2016-08-05</nc:capability>
+                <nc:capability>urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring</nc:capability>
+                <nc:capability>http://xml.juniper.net/netconf/junos/1.0</nc:capability>
+                <nc:capability>http://xml.juniper.net/dmi/system/1.0</nc:capability>
+                <nc:capability>http://yang.juniper.net/junos/jcmd?module=junos-configuration-metadata&amp;revision=2021-09-01</nc:capability>
+              </nc:capabilities>
+              <nc:session-id>43129</nc:session-id>
+            </nc:hello>
+            ]]>]]>
+        "#;
+        let expect = ServerHello {
+            capabilities: Capabilities {
+                inner: [
+                    Capability::new_static("urn:ietf:params:netconf:base:1.0"),
+                    Capability::new_static("urn:ietf:params:netconf:capability:candidate:1.0"),
+                    Capability::new_static(
+                        "urn:ietf:params:netconf:capability:confirmed-commit:1.0",
+                    ),
+                    Capability::new_static("urn:ietf:params:netconf:capability:validate:1.0"),
+                    Capability::new_static(
+                        "urn:ietf:params:netconf:capability:url:1.0?scheme=http,ftp,file",
+                    ),
+                    Capability::new_static("urn:ietf:params:xml:ns:netconf:base:1.0?module=ietf-netconf&amp;revision=2011-06-01"),
+                    Capability::new_static(
+                        "urn:ietf:params:xml:ns:netconf:capability:candidate:1.0",
+                    ),
+                    Capability::new_static(
+                        "urn:ietf:params:xml:ns:netconf:capability:confirmed-commit:1.0",
+                    ),
+                    Capability::new_static(
+                        "urn:ietf:params:xml:ns:netconf:capability:validate:1.0",
+                    ),
+                    Capability::new_static(
+                        "urn:ietf:params:xml:ns:netconf:capability:url:1.0?scheme=http,ftp,file",
+                    ),
+                    Capability::new_static("urn:ietf:params:xml:ns:yang:ietf-inet-types?module=ietf-inet-types&amp;revision=2013-07-15"),
+                    Capability::new_static("urn:ietf:params:xml:ns:yang:ietf-yang-metadata?module=ietf-yang-metadata&amp;revision=2016-08-05"),
+                    Capability::new_static("urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring"),
+                    Capability::new_static("http://xml.juniper.net/netconf/junos/1.0"),
+                    Capability::new_static("http://xml.juniper.net/dmi/system/1.0"),
+                    Capability::new_static("http://yang.juniper.net/junos/jcmd?module=junos-configuration-metadata&amp;revision=2021-09-01")
+                ]
+                .into(),
+            },
+            session_id: 43129,
+        };
+        assert_eq!(expect, ServerHello::from_xml(xml).unwrap());
+    }
+
+    #[test]
     fn client_hello_to_xml() {
         let req = ClientHello {
             capabilities: Capabilities {
                 inner: [Capability::new_static("urn:ietf:params:netconf:base:1.0")].into(),
             },
         };
-        let expect = "<hello><capabilities><capability>urn:ietf:params:netconf:base:1.0</capability></capabilities></hello>";
+        let expect = "<hello><capabilities><capability>urn:ietf:params:netconf:base:1.0</capability></capabilities></hello>]]>]]>";
         assert_eq!(req.to_xml().unwrap(), expect);
     }
 }

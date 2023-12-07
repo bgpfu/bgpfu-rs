@@ -1,24 +1,31 @@
 use std::fmt::Debug;
 
-use crate::message::{FromXml, ToXml};
+use crate::message::{ReadXml, ToXml};
 
 pub trait Operation: Debug + ToXml + Send + Sync {
-    type ReplyData: Debug + FromXml;
+    type ReplyData: Debug + ReadXml;
 }
 
 pub mod get_config {
     use std::{fmt, io::Write};
 
-    use quick_xml::{events::Event, Reader, Writer};
+    use quick_xml::{events::BytesStart, NsReader, Writer};
 
     use crate::Error;
 
-    use super::{FromXml, Operation, ToXml};
+    use super::{Operation, ReadXml, ToXml};
 
     #[derive(Debug, Default, Clone)]
     pub struct GetConfig {
         source: Source,
         filter: Option<String>,
+    }
+
+    impl GetConfig {
+        #[must_use]
+        pub const fn new(source: Source, filter: Option<String>) -> Self {
+            Self { source, filter }
+        }
     }
 
     impl Operation for GetConfig {
@@ -71,45 +78,26 @@ pub mod get_config {
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct Reply {
-        configuration: Box<str>,
+        inner: Box<str>,
     }
 
-    impl FromXml for Reply {
+    impl ReadXml for Reply {
         type Error = Error;
 
-        #[tracing::instrument]
-        fn from_xml<S>(input: S) -> Result<Self, Self::Error>
-        where
-            S: AsRef<str> + std::fmt::Debug,
-        {
-            let mut reader = Reader::from_str(input.as_ref());
-            _ = reader.trim_text(true);
-            let mut configuration = None;
-            tracing::debug!("expecting <configuration>");
-            loop {
-                match reader.read_event()? {
-                    Event::Start(tag) if tag.name().as_ref() == b"configuration" => {
-                        let span = reader.read_text(tag.to_end().name())?;
-                        configuration = Some(span.as_ref().into());
-                    }
-                    Event::Comment(_) => continue,
-                    Event::Eof => break,
-                    event => {
-                        tracing::error!(?event, "unexpected xml event");
-                        return Err(crate::Error::UnexpectedXmlEvent(event.into_owned()));
-                    }
-                }
-            }
-            Ok(Self {
-                configuration: configuration
-                    .ok_or_else(|| Error::MissingElement("rpc-reply", "<configuration>"))?,
-            })
+        #[tracing::instrument(skip(reader))]
+        fn read_xml(
+            reader: &mut NsReader<&[u8]>,
+            start: &BytesStart<'_>,
+        ) -> Result<Self, Self::Error> {
+            let end = start.to_end();
+            let inner = reader.read_text(end.name())?.into();
+            Ok(Self { inner })
         }
     }
 
     impl fmt::Display for Reply {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            self.configuration.fmt(f)
+            self.inner.fmt(f)
         }
     }
 
@@ -117,10 +105,12 @@ pub mod get_config {
     mod tests {
         use super::*;
 
+        use quick_xml::events::Event;
+
         #[test]
         fn default_request_to_xml() {
             let req = GetConfig::default();
-            let expect = "<get-config><source><running/></source></get-config>";
+            let expect = "<get-config><source><running/></source></get-config>]]>]]>";
             assert_eq!(req.to_xml().unwrap(), expect);
         }
 
@@ -128,9 +118,16 @@ pub mod get_config {
         fn reply_from_xml() {
             let reply = "<configuration><top/></configuration>";
             let expect = Reply {
-                configuration: "<top/>".into(),
+                inner: reply.into(),
             };
-            assert_eq!(Reply::from_xml(reply).unwrap(), expect);
+            let msg = format!("<data>{reply}</data>");
+            let mut reader = NsReader::from_str(msg.as_str());
+            _ = reader.trim_text(true);
+            if let Event::Start(start) = reader.read_event().unwrap() {
+                assert_eq!(Reply::read_xml(&mut reader, &start).unwrap(), expect);
+            } else {
+                panic!("missing <data> tag")
+            }
         }
     }
 }
@@ -168,7 +165,7 @@ pub mod close_session {
         #[test]
         fn request_to_xml() {
             let req = CloseSession;
-            let expect = "<close-session/>";
+            let expect = "<close-session/>]]>]]>";
             assert_eq!(req.to_xml().unwrap(), expect);
         }
     }
