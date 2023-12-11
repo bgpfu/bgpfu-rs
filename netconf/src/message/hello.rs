@@ -13,7 +13,7 @@ use quick_xml::{
 
 use crate::Error;
 
-use super::{xmlns, ClientMsg, ReadXml, ServerMsg, ToXml};
+use super::{xmlns, ClientMsg, ReadXml, ServerMsg, WriteXml};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ServerHello {
@@ -108,7 +108,7 @@ impl ClientHello {
     }
 }
 
-impl ToXml for ClientHello {
+impl WriteXml for ClientHello {
     type Error = Error;
 
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
@@ -159,7 +159,7 @@ impl Capabilities {
     }
 }
 
-impl ToXml for Capabilities {
+impl WriteXml for Capabilities {
     type Error = Error;
 
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
@@ -212,7 +212,7 @@ impl Capability {
     }
 }
 
-impl ToXml for Capability {
+impl WriteXml for Capability {
     type Error = Error;
 
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {

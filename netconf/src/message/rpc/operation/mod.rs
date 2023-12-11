@@ -1,8 +1,8 @@
 use std::fmt::Debug;
 
-use crate::message::{ReadXml, ToXml};
+use crate::message::{ReadXml, WriteXml};
 
-pub trait Operation: Debug + ToXml + Send + Sync {
+pub trait Operation: Debug + WriteXml + Send + Sync {
     type ReplyData: Debug + ReadXml;
 }
 
@@ -13,7 +13,7 @@ pub mod get_config {
 
     use crate::Error;
 
-    use super::{Operation, ReadXml, ToXml};
+    use super::{Operation, ReadXml, WriteXml};
 
     #[derive(Debug, Default, Clone)]
     pub struct GetConfig {
@@ -32,7 +32,7 @@ pub mod get_config {
         type ReplyData = Reply;
     }
 
-    impl ToXml for GetConfig {
+    impl WriteXml for GetConfig {
         type Error = Error;
 
         fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
@@ -64,7 +64,7 @@ pub mod get_config {
         Running,
     }
 
-    impl ToXml for Source {
+    impl WriteXml for Source {
         type Error = Error;
 
         fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
@@ -104,13 +104,20 @@ pub mod get_config {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use crate::message::{
+            rpc::{MessageId, Request},
+            ClientMsg,
+        };
 
         use quick_xml::events::Event;
 
         #[test]
         fn default_request_to_xml() {
-            let req = GetConfig::default();
-            let expect = "<get-config><source><running/></source></get-config>]]>]]>";
+            let req = Request {
+                message_id: MessageId(101),
+                operation: GetConfig::default(),
+            };
+            let expect = r#"<rpc message-id="101"><get-config><source><running/></source></get-config></rpc>]]>]]>"#;
             assert_eq!(req.to_xml().unwrap(), expect);
         }
 
@@ -137,7 +144,7 @@ pub mod close_session {
 
     use quick_xml::Writer;
 
-    use super::{super::Empty, Operation, ToXml};
+    use super::{super::Empty, Operation, WriteXml};
     use crate::Error;
 
     #[derive(Debug, Default, Clone, Copy)]
@@ -147,7 +154,7 @@ pub mod close_session {
         type ReplyData = Empty;
     }
 
-    impl ToXml for CloseSession {
+    impl WriteXml for CloseSession {
         type Error = Error;
 
         fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
@@ -162,10 +169,18 @@ pub mod close_session {
     mod tests {
         use super::*;
 
+        use crate::message::{
+            rpc::{MessageId, Request},
+            ClientMsg,
+        };
+
         #[test]
         fn request_to_xml() {
-            let req = CloseSession;
-            let expect = "<close-session/>]]>]]>";
+            let req = Request {
+                message_id: MessageId(101),
+                operation: CloseSession,
+            };
+            let expect = r#"<rpc message-id="101"><close-session/></rpc>]]>]]>"#;
             assert_eq!(req.to_xml().unwrap(), expect);
         }
     }

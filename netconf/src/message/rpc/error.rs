@@ -451,7 +451,7 @@ mod tests {
     use super::*;
     use crate::message::{
         rpc::{Empty, MessageId, Operation, PartialReply, Reply, ReplyInner},
-        ServerMsg, ToXml,
+        ServerMsg, WriteXml,
     };
 
     #[derive(Debug, PartialEq)]
@@ -461,7 +461,7 @@ mod tests {
         type ReplyData = Empty;
     }
 
-    impl ToXml for Dummy {
+    impl WriteXml for Dummy {
         type Error = crate::Error;
         fn write_xml<W: Write>(&self, _: &mut W) -> Result<(), Self::Error> {
             Ok(())

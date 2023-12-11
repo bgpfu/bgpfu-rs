@@ -27,24 +27,24 @@ pub trait ReadXml: Sized {
     fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, Self::Error>;
 }
 
-pub trait ToXml {
+pub trait WriteXml {
     type Error: From<FromUtf8Error> + std::error::Error + Send + Sync + 'static;
 
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error>;
+}
 
+#[async_trait]
+pub trait ClientMsg: WriteXml + Debug
+where
+    Error: From<Self::Error>,
+{
     fn to_xml(&self) -> Result<String, Self::Error> {
         let mut buf = Vec::new();
         self.write_xml(&mut buf)?;
         buf.extend_from_slice(MARKER);
         Ok(String::from_utf8(buf)?)
     }
-}
 
-#[async_trait]
-pub trait ClientMsg: ToXml + Debug
-where
-    Error: From<Self::Error>,
-{
     #[tracing::instrument(skip(sender), err, level = "debug")]
     async fn send<T: SendHandle>(&self, sender: &mut T) -> Result<(), Error> {
         let serialized = self.to_xml()?;

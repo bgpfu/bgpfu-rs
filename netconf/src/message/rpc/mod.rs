@@ -6,7 +6,7 @@ use quick_xml::{
     NsReader, Writer,
 };
 
-use super::{xmlns, ClientMsg, ReadXml, ServerMsg, ToXml, MARKER};
+use super::{xmlns, ClientMsg, ReadXml, ServerMsg, WriteXml, MARKER};
 
 pub mod error;
 pub use self::error::{Error, Errors};
@@ -47,7 +47,7 @@ impl<O: Operation> Request<O> {
     }
 }
 
-impl<O: Operation> ToXml for Request<O> {
+impl<O: Operation> WriteXml for Request<O> {
     type Error = crate::Error;
 
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
@@ -270,7 +270,7 @@ mod tests {
         foo: &'static str,
     }
 
-    impl ToXml for Foo {
+    impl WriteXml for Foo {
         type Error = crate::Error;
 
         fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
@@ -342,7 +342,7 @@ mod tests {
     #[derive(Debug, Clone, PartialEq, Eq)]
     struct Bar;
 
-    impl ToXml for Bar {
+    impl WriteXml for Bar {
         type Error = crate::Error;
 
         fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
