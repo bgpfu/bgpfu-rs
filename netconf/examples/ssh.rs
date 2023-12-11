@@ -4,7 +4,7 @@ use clap_verbosity_flag::{Verbosity, WarnLevel};
 use simplelog::{ColorChoice, TermLogger, TerminalMode};
 
 use netconf::{
-    message::rpc::operation::get_config::{GetConfig, Source},
+    message::rpc::operation::{get_config::Source, GetConfig},
     transport::Password,
     Session,
 };

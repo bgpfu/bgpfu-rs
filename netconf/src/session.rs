@@ -11,7 +11,7 @@ use tokio::{net::ToSocketAddrs, sync::Mutex};
 
 use crate::{
     message::{
-        rpc::{self, operation::close_session::CloseSession},
+        rpc::{self, operation::CloseSession},
         Capabilities, Capability, ClientHello, ClientMsg, ServerHello, ServerMsg, BASE,
     },
     transport::{Password, Ssh, Tls, Transport},

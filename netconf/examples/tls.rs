@@ -11,7 +11,7 @@ use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use simplelog::{ColorChoice, TermLogger, TerminalMode};
 
 use netconf::{
-    message::rpc::operation::get_config::{GetConfig, Source},
+    message::rpc::operation::{get_config::Source, GetConfig},
     Session,
 };
 
