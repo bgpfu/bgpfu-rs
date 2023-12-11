@@ -12,6 +12,9 @@ use crate::Error;
 mod ssh;
 pub use self::ssh::Ssh;
 
+mod tls;
+pub use self::tls::Tls;
+
 pub trait Transport: Send {
     type SendHandle: SendHandle;
     type RecvHandle: RecvHandle;

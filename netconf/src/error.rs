@@ -9,6 +9,9 @@ pub enum Error {
     #[error(transparent)]
     SshTransport(#[from] russh::Error),
 
+    #[error(transparent)]
+    TlsTransport(#[from] tokio_rustls::rustls::Error),
+
     #[error("authentication failed for user {0}")]
     Authentication(String),
 
@@ -80,4 +83,7 @@ pub enum Error {
 
     #[error("encountered an unknown rpc-error error-info type: {0}")]
     UnknownErrorInfo(String),
+
+    #[error(transparent)]
+    InvalidDnsName(#[from] rustls_pki_types::InvalidDnsNameError),
 }

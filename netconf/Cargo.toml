@@ -22,6 +22,8 @@ memchr = "^2.0"
 quick-xml = "^0.31"
 russh = "^0.39"
 russh-keys = "^0.38"
+rustls-pki-types = "^1.0"
+tokio-rustls = "^0.25"
 tracing = { version = "^0.1", features = ["log"] }
 
 
@@ -31,3 +33,4 @@ clap.workspace = true
 clap-verbosity-flag.workspace = true
 simplelog.workspace = true
 version-sync.workspace = true
+rustls-pemfile = "^2.0"

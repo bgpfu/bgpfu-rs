@@ -6,6 +6,7 @@ use std::{
     sync::Arc,
 };
 
+use rustls_pki_types::{CertificateDer, InvalidDnsNameError, PrivateKeyDer, ServerName};
 use tokio::{net::ToSocketAddrs, sync::Mutex};
 
 use crate::{
@@ -13,7 +14,7 @@ use crate::{
         rpc::{self, operation::close_session::CloseSession},
         Capabilities, Capability, ClientHello, ClientMsg, ServerHello, ServerMsg, BASE,
     },
-    transport::{Password, Ssh, Transport},
+    transport::{Password, Ssh, Tls, Transport},
     Error,
 };
 
@@ -56,6 +57,31 @@ impl Session<Ssh> {
     {
         tracing::info!("starting ssh transport");
         let transport = Ssh::connect(addr, username, password).await?;
+        Self::new(transport).await
+    }
+}
+
+impl Session<Tls> {
+    #[tracing::instrument]
+    pub async fn tls<A, S>(
+        addr: A,
+        server_name: S,
+        ca_cert: CertificateDer<'_>,
+        client_cert: CertificateDer<'static>,
+        client_key: PrivateKeyDer<'static>,
+    ) -> Result<Self, Error>
+    where
+        A: ToSocketAddrs + Debug + Send,
+        S: TryInto<ServerName<'static>, Error = InvalidDnsNameError> + Debug + Send,
+    {
+        tracing::info!("starting tls transport");
+        let transport = Tls::connect(addr, server_name, ca_cert, client_cert, client_key).await?;
+        Self::new(transport).await
+    }
+}
+
+impl<T: Transport> Session<T> {
+    async fn new(transport: T) -> Result<Self, Error> {
         let client_hello = ClientHello::new(&[BASE]);
         let (mut tx, mut rx) = transport.split();
         let ((), server_hello) =
@@ -74,9 +100,7 @@ impl Session<Ssh> {
             last_message_id: rpc::MessageId::default(),
         })
     }
-}
 
-impl<T: Transport> Session<T> {
     #[must_use]
     pub const fn session_id(&self) -> usize {
         self.session_id
