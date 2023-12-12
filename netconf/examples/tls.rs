@@ -11,7 +11,7 @@ use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use simplelog::{ColorChoice, TermLogger, TerminalMode};
 
 use netconf::{
-    message::rpc::operation::{get_config::Source, GetConfig},
+    message::rpc::operation::{Datastore, GetConfig},
     Session,
 };
 
@@ -38,7 +38,9 @@ async fn main() -> anyhow::Result<()> {
         println!("    {}", capability.uri());
     });
     let (config, _) = tokio::try_join!(
-        session.rpc(GetConfig::new(Source::Running, None,)).await?,
+        session
+            .rpc(GetConfig::new(Datastore::Running, None))
+            .await?,
         session.close().await?
     )?;
     if let Some(config) = config {

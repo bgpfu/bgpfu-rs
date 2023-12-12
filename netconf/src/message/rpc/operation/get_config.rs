@@ -4,17 +4,17 @@ use quick_xml::{events::BytesStart, NsReader, Writer};
 
 use crate::Error;
 
-use super::{Operation, ReadXml, WriteXml};
+use super::{Datastore, Operation, ReadXml, WriteXml};
 
 #[derive(Debug, Default, Clone)]
 pub struct GetConfig {
-    source: Source,
+    source: Datastore,
     filter: Option<String>,
 }
 
 impl GetConfig {
     #[must_use]
-    pub const fn new(source: Source, filter: Option<String>) -> Self {
+    pub const fn new(source: Datastore, filter: Option<String>) -> Self {
         Self { source, filter }
     }
 }
@@ -45,24 +45,6 @@ impl WriteXml for GetConfig {
                 };
                 Ok::<_, Self::Error>(())
             })?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, Default, Copy, Clone)]
-pub enum Source {
-    #[default]
-    Running,
-}
-
-impl WriteXml for Source {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
-        let mut writer = Writer::new(writer);
-        _ = match self {
-            Self::Running => writer.create_element("running").write_empty()?,
-        };
         Ok(())
     }
 }
