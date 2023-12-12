@@ -3,6 +3,8 @@ use std::{
     fmt::Debug,
     future::Future,
     mem,
+    num::NonZeroU32,
+    str::FromStr,
     sync::Arc,
 };
 
@@ -18,12 +20,30 @@ use crate::{
     Error,
 };
 
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SessionId(NonZeroU32);
+
+impl SessionId {
+    pub(crate) fn new(n: u32) -> Option<Self> {
+        NonZeroU32::new(n).map(Self)
+    }
+}
+
+impl FromStr for SessionId {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.parse()?))
+    }
+}
+
 #[derive(Debug)]
 pub struct Session<T: Transport> {
     transport_tx: Arc<Mutex<T::SendHandle>>,
     transport_rx: Arc<Mutex<T::RecvHandle>>,
     capabilities: Capabilities,
-    session_id: usize,
+    session_id: SessionId,
     last_message_id: rpc::MessageId,
     requests: Arc<Mutex<HashMap<rpc::MessageId, OutstandingRequest>>>,
 }
@@ -102,7 +122,7 @@ impl<T: Transport> Session<T> {
     }
 
     #[must_use]
-    pub const fn session_id(&self) -> usize {
+    pub const fn session_id(&self) -> SessionId {
         self.session_id
     }
 

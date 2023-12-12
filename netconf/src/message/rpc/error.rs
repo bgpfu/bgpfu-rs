@@ -11,6 +11,8 @@ use quick_xml::{
     NsReader,
 };
 
+use crate::session::SessionId;
+
 use super::{xmlns, ReadXml};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -402,7 +404,11 @@ impl ReadXml for Info {
                             reader.read_text(tag.to_end().name())?.as_ref().into(),
                         )),
                         b"session-id" => inner.push(InfoElement::SessionId(
-                            reader.read_text(tag.to_end().name())?.as_ref().parse()?,
+                            reader
+                                .read_text(tag.to_end().name())?
+                                .as_ref()
+                                .parse()
+                                .map(SessionId::new)?,
                         )),
                         b"ok-element" => inner.push(InfoElement::OkElement(
                             reader.read_text(tag.to_end().name())?.as_ref().into(),
@@ -435,8 +441,7 @@ pub enum InfoElement {
     BadAttribute(Arc<str>),
     BadElement(Arc<str>),
     BadNamespace(Arc<str>),
-    // TODO: SessionId should be a newtype containing a `usize`
-    SessionId(usize),
+    SessionId(Option<SessionId>),
 
     // Deprecated error-info elements:
     OkElement(Arc<str>),

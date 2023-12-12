@@ -11,18 +11,18 @@ use quick_xml::{
     NsReader, Writer,
 };
 
-use crate::Error;
+use crate::{session::SessionId, Error};
 
 use super::{xmlns, ClientMsg, ReadXml, ServerMsg, WriteXml};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ServerHello {
     capabilities: Capabilities,
-    session_id: usize,
+    session_id: SessionId,
 }
 
 impl ServerHello {
-    pub(crate) const fn session_id(&self) -> usize {
+    pub(crate) const fn session_id(&self) -> SessionId {
         self.session_id
     }
 }
@@ -282,7 +282,7 @@ mod tests {
                 ]
                 .into(),
             },
-            session_id: 802,
+            session_id: SessionId::new(802).unwrap(),
         };
         assert_eq!(expect, ServerHello::from_xml(xml).unwrap());
     }
@@ -347,7 +347,7 @@ mod tests {
                 ]
                 .into(),
             },
-            session_id: 43129,
+            session_id: SessionId::new(43129).unwrap(),
         };
         assert_eq!(expect, ServerHello::from_xml(xml).unwrap());
     }
