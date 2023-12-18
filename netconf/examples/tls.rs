@@ -11,7 +11,7 @@ use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use simplelog::{ColorChoice, TermLogger, TerminalMode};
 
 use netconf::{
-    message::rpc::operation::{Datastore, GetConfig},
+    message::rpc::operation::{Builder, Datastore, GetConfig},
     Session,
 };
 
@@ -33,13 +33,9 @@ async fn main() -> anyhow::Result<()> {
     let mut session = Session::tls(addr, args.server_name, ca_cert, client_cert, client_key)
         .await
         .context("failed to establish netconf session")?;
-    println!("negotiated capabilities:");
-    session.capabilities().for_each(|capability| {
-        println!("    {}", capability.uri());
-    });
     let (config, _) = tokio::try_join!(
         session
-            .rpc(GetConfig::new(Datastore::Running, None))
+            .rpc::<GetConfig, _>(|builder| builder.source(Datastore::Running).finish())
             .await?,
         session.close().await?
     )?;

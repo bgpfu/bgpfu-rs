@@ -2,18 +2,44 @@ use std::{fmt::Debug, io::Write};
 
 use crate::{
     message::{ReadXml, WriteXml},
+    session::Context,
     Error,
 };
 
 use quick_xml::Writer;
 
-pub trait Operation: Debug + WriteXml + Send + Sync {
+pub trait Operation: Debug + WriteXml + Send + Sync + Sized {
+    type Builder<'a>: Debug + Builder<'a, Self>;
     type ReplyData: Debug + ReadXml;
+
+    fn new<'a, F>(ctx: &'a Context, build_fn: F) -> Result<Self, Error>
+    where
+        F: Fn(Self::Builder<'a>) -> Result<Self, Error>,
+    {
+        Self::Builder::new(ctx).build(build_fn)
+    }
+}
+
+pub trait Builder<'a, O: Operation>: Sized {
+    fn new(ctx: &'a Context) -> Self;
+
+    fn finish(self) -> Result<O, Error>;
+
+    fn build<F>(self, build_fn: F) -> Result<O, Error>
+    where
+        F: Fn(Self) -> Result<O, Error>,
+    {
+        build_fn(self)
+    }
 }
 
 pub mod get_config;
 #[doc(inline)]
 pub use self::get_config::GetConfig;
+
+pub mod edit_config;
+#[doc(inline)]
+pub use self::edit_config::EditConfig;
 
 pub(crate) mod close_session;
 pub(crate) use self::close_session::CloseSession;

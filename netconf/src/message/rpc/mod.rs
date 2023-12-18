@@ -263,7 +263,7 @@ impl ReadXml for Empty {
 mod tests {
     use quick_xml::events::BytesText;
 
-    use super::*;
+    use super::{operation, *};
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     struct Foo {
@@ -282,7 +282,26 @@ mod tests {
     }
 
     impl Operation for Foo {
+        type Builder<'a> = FooBuilder;
         type ReplyData = Empty;
+    }
+
+    #[derive(Debug, Default)]
+    struct FooBuilder {
+        foo: Option<&'static str>,
+    }
+
+    impl operation::Builder<'_, Foo> for FooBuilder {
+        fn new(_: &crate::session::Context) -> Self {
+            Self { foo: None }
+        }
+
+        fn finish(self) -> Result<Foo, crate::Error> {
+            let foo = self
+                .foo
+                .ok_or_else(|| crate::Error::MissingOperationParameter("foo", "foo"))?;
+            Ok(Foo { foo })
+        }
     }
 
     #[test]
@@ -352,6 +371,7 @@ mod tests {
     }
 
     impl Operation for Bar {
+        type Builder<'a> = BarBuilder;
         type ReplyData = BarReply;
     }
 
@@ -387,6 +407,19 @@ mod tests {
             Ok(Self(result.ok_or_else(|| {
                 crate::Error::MissingElement("rpc-reply", "<result>")
             })?))
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct BarBuilder;
+
+    impl operation::Builder<'_, Bar> for BarBuilder {
+        fn new(_: &crate::session::Context) -> Self {
+            Self
+        }
+
+        fn finish(self) -> Result<Bar, crate::Error> {
+            Ok(Bar)
         }
     }
 

@@ -2,7 +2,7 @@ use std::{fmt, io::Write};
 
 use quick_xml::{events::BytesStart, NsReader, Writer};
 
-use crate::Error;
+use crate::{session::Context, Error};
 
 use super::{Datastore, Operation, ReadXml, WriteXml};
 
@@ -12,14 +12,8 @@ pub struct GetConfig {
     filter: Option<String>,
 }
 
-impl GetConfig {
-    #[must_use]
-    pub const fn new(source: Datastore, filter: Option<String>) -> Self {
-        Self { source, filter }
-    }
-}
-
 impl Operation for GetConfig {
+    type Builder<'a> = Builder<'a>;
     type ReplyData = Reply;
 }
 
@@ -49,6 +43,46 @@ impl WriteXml for GetConfig {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Builder<'a> {
+    ctx: &'a Context,
+    source: Option<Datastore>,
+    filter: Option<String>,
+}
+
+impl Builder<'_> {
+    #[must_use]
+    pub const fn source(mut self, source: Datastore) -> Self {
+        self.source = Some(source);
+        self
+    }
+
+    #[must_use]
+    pub fn filter(mut self, filter: Option<String>) -> Self {
+        self.filter = filter;
+        self
+    }
+}
+
+impl<'a> super::Builder<'a, GetConfig> for Builder<'a> {
+    fn new(ctx: &'a Context) -> Self {
+        Self {
+            ctx,
+            source: None,
+            filter: None,
+        }
+    }
+
+    fn finish(self) -> Result<GetConfig, Error> {
+        Ok(GetConfig {
+            source: self
+                .source
+                .ok_or_else(|| Error::MissingOperationParameter("get-config", "source"))?,
+            filter: self.filter,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Reply {
     inner: Box<str>,
@@ -68,6 +102,12 @@ impl ReadXml for Reply {
 impl fmt::Display for Reply {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
+    }
+}
+
+impl AsRef<str> for Reply {
+    fn as_ref(&self) -> &str {
+        self.inner.as_ref()
     }
 }
 

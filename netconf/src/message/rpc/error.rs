@@ -455,7 +455,7 @@ mod tests {
 
     use super::*;
     use crate::message::{
-        rpc::{Empty, MessageId, Operation, PartialReply, Reply, ReplyInner},
+        rpc::{operation, Empty, MessageId, Operation, PartialReply, Reply, ReplyInner},
         ServerMsg, WriteXml,
     };
 
@@ -463,6 +463,7 @@ mod tests {
     struct Dummy;
 
     impl Operation for Dummy {
+        type Builder<'a> = Builder;
         type ReplyData = Empty;
     }
 
@@ -470,6 +471,19 @@ mod tests {
         type Error = crate::Error;
         fn write_xml<W: Write>(&self, _: &mut W) -> Result<(), Self::Error> {
             Ok(())
+        }
+    }
+
+    #[derive(Debug)]
+    struct Builder;
+
+    impl operation::Builder<'_, Dummy> for Builder {
+        fn new(_: &crate::session::Context) -> Self {
+            Self
+        }
+
+        fn finish(self) -> Result<Dummy, crate::Error> {
+            Ok(Dummy)
         }
     }
 

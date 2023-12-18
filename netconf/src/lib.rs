@@ -57,6 +57,9 @@ pub mod transport;
 mod session;
 pub use self::session::Session;
 
+#[allow(missing_docs, clippy::missing_errors_doc)]
+mod capabilities;
+
 // silence unused dev-dependency warnings
 #[cfg(test)]
 mod deps {

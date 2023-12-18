@@ -13,11 +13,11 @@ use crate::{
 };
 
 mod hello;
-pub(crate) use self::hello::{Capabilities, Capability, ClientHello, ServerHello, BASE};
+pub(crate) use self::hello::{ClientHello, ServerHello};
 
 pub mod rpc;
 
-mod xmlns;
+pub(crate) mod xmlns;
 
 pub(crate) const MARKER: &[u8] = b"]]>]]>";
 

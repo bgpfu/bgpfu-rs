@@ -12,9 +12,13 @@ use rustls_pki_types::{CertificateDer, InvalidDnsNameError, PrivateKeyDer, Serve
 use tokio::{net::ToSocketAddrs, sync::Mutex};
 
 use crate::{
+    capabilities::{Base, Capabilities, Capability},
     message::{
-        rpc::{self, operation::CloseSession},
-        Capabilities, Capability, ClientHello, ClientMsg, ServerHello, ServerMsg, BASE,
+        rpc::{
+            self,
+            operation::{Builder, CloseSession, Datastore},
+        },
+        ClientHello, ClientMsg, ServerHello, ServerMsg,
     },
     transport::{Password, Ssh, Tls, Transport},
     Error,
@@ -42,10 +46,50 @@ impl FromStr for SessionId {
 pub struct Session<T: Transport> {
     transport_tx: Arc<Mutex<T::SendHandle>>,
     transport_rx: Arc<Mutex<T::RecvHandle>>,
-    capabilities: Capabilities,
-    session_id: SessionId,
+    context: Context,
     last_message_id: rpc::MessageId,
     requests: Arc<Mutex<HashMap<rpc::MessageId, OutstandingRequest>>>,
+}
+
+#[derive(Debug)]
+pub struct Context {
+    session_id: SessionId,
+    protocol_version: Base,
+    client_capabilities: Capabilities,
+    server_capabilities: Capabilities,
+}
+
+impl Context {
+    const fn new(
+        session_id: SessionId,
+        protocol_version: Base,
+        client_capabilities: Capabilities,
+        server_capabilities: Capabilities,
+    ) -> Self {
+        Self {
+            session_id,
+            protocol_version,
+            client_capabilities,
+            server_capabilities,
+        }
+    }
+
+    #[must_use]
+    pub const fn session_id(&self) -> SessionId {
+        self.session_id
+    }
+
+    pub const fn protocol_version(&self) -> Base {
+        self.protocol_version
+    }
+
+    pub const fn client_capabilities(&self) -> &Capabilities {
+        &self.client_capabilities
+    }
+
+    pub const fn server_capabilities(&self) -> &Capabilities {
+        &self.server_capabilities
+    }
 }
 
 #[derive(Debug)]
@@ -102,41 +146,51 @@ impl Session<Tls> {
 
 impl<T: Transport> Session<T> {
     async fn new(transport: T) -> Result<Self, Error> {
-        let client_hello = ClientHello::new(&[BASE]);
+        let client_hello = ClientHello::new(&[Capability::Base(Base::V1_0)]);
         let (mut tx, mut rx) = transport.split();
         let ((), server_hello) =
             tokio::try_join!(client_hello.send(&mut tx), ServerHello::recv(&mut rx))?;
         let transport_tx = Arc::new(Mutex::new(tx));
         let transport_rx = Arc::new(Mutex::new(rx));
-        let capabilities = client_hello.common_capabilities(&server_hello)?;
         let session_id = server_hello.session_id();
+        let server_capabilities = server_hello.capabilities();
+        let client_capabilities = client_hello.capabilities();
+        let protocol_version = client_capabilities.highest_common_version(&server_capabilities)?;
+        let context = Context::new(
+            session_id,
+            protocol_version,
+            client_capabilities,
+            server_capabilities,
+        );
         let requests = Arc::new(Mutex::new(HashMap::default()));
         Ok(Self {
             transport_tx,
             transport_rx,
-            capabilities,
-            session_id,
+            context,
             requests,
             last_message_id: rpc::MessageId::default(),
         })
     }
 
     #[must_use]
-    pub const fn session_id(&self) -> SessionId {
-        self.session_id
+    pub const fn context(&self) -> &Context {
+        &self.context
     }
 
-    pub fn capabilities(&self) -> impl Iterator<Item = &Capability> {
-        self.capabilities.iter()
-    }
-
-    #[tracing::instrument(skip(self))]
-    pub async fn rpc<O: rpc::Operation>(
+    #[tracing::instrument(skip(self, build_fn))]
+    pub async fn rpc<O, F>(
         &mut self,
-        operation: O,
-    ) -> Result<impl Future<Output = Result<Option<O::ReplyData>, Error>>, Error> {
+        build_fn: F,
+    ) -> Result<impl Future<Output = Result<Option<O::ReplyData>, Error>>, Error>
+    where
+        O: rpc::Operation,
+        // TODO: consider whether F should be Fn or FnOnce
+        F: Fn(O::Builder<'_>) -> Result<O, Error> + Send,
+    {
         let message_id = self.last_message_id.increment();
-        let request = rpc::Request::new(message_id, operation);
+        let request = O::Builder::new(&self.context)
+            .build(build_fn)
+            .map(|operation| rpc::Request::new(message_id, operation))?;
         #[allow(clippy::significant_drop_in_scrutinee)]
         match self.requests.lock().await.entry(message_id) {
             Entry::Occupied(_) => return Err(Error::MessageIdCollision(message_id)),
@@ -182,7 +236,7 @@ impl<T: Transport> Session<T> {
 
     #[tracing::instrument(skip(self))]
     pub async fn close(mut self) -> Result<impl Future<Output = Result<(), Error>>, Error> {
-        self.rpc(CloseSession)
+        self.rpc::<CloseSession, _>(Builder::finish)
             .await
             .map(|fut| async move { fut.await.map(|_| drop(self)) })
     }

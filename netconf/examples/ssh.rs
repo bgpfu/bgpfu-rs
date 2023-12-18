@@ -4,7 +4,7 @@ use clap_verbosity_flag::{Verbosity, WarnLevel};
 use simplelog::{ColorChoice, TermLogger, TerminalMode};
 
 use netconf::{
-    message::rpc::operation::{Datastore, GetConfig},
+    message::rpc::operation::{Builder, Datastore, GetConfig},
     transport::Password,
     Session,
 };
@@ -23,16 +23,24 @@ async fn main() -> anyhow::Result<()> {
     let mut session = Session::ssh(addr, args.username, args.password)
         .await
         .context("failed to establish netconf session")?;
-    println!("negotiated capabilities:");
-    session.capabilities().for_each(|capability| {
-        println!("    {}", capability.uri());
-    });
+    println!(
+        "negotiated protocol version {:?}",
+        session.context().protocol_version()
+    );
+    println!("server capabilities:");
+    session
+        .context()
+        .server_capabilities()
+        .iter()
+        .for_each(|capability| {
+            println!("    {capability:?}");
+        });
     let (config, _) = tokio::try_join!(
         session
-            .rpc(GetConfig::new(
-                Datastore::Running,
-                Some("<configuration><system/></configuration>".to_string())
-            ))
+            .rpc::<GetConfig, _>(|builder| builder
+                .source(Datastore::Running)
+                .filter(Some("<configuration><system/></configuration>".to_string()))
+                .finish())
             .await?,
         session.close().await?
     )?;

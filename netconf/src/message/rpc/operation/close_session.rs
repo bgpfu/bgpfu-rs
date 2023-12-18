@@ -3,12 +3,13 @@ use std::io::Write;
 use quick_xml::Writer;
 
 use super::{super::Empty, Operation, WriteXml};
-use crate::Error;
+use crate::{session::Context, Error};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct CloseSession;
 
 impl Operation for CloseSession {
+    type Builder<'a> = Builder;
     type ReplyData = Empty;
 }
 
@@ -20,6 +21,19 @@ impl WriteXml for CloseSession {
             .create_element("close-session")
             .write_empty()?;
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct Builder;
+
+impl super::Builder<'_, CloseSession> for Builder {
+    fn new(_: &Context) -> Self {
+        Self
+    }
+
+    fn finish(self) -> Result<CloseSession, Error> {
+        Ok(CloseSession)
     }
 }
 

@@ -18,6 +18,12 @@ pub enum Error {
     #[error("a transport error occurred: {0}")]
     Transport(#[from] std::io::Error),
 
+    #[error("failed to negotiate a common base protocol version")]
+    VersionNegotiation,
+
+    #[error("missing required parameter {1} for rpc operation {0}")]
+    MissingOperationParameter(&'static str, &'static str),
+
     #[error("failed to enqueue a message")]
     EnqueueMessage(#[from] mpsc::error::SendError<Bytes>),
 
