@@ -9,7 +9,7 @@ use super::{Datastore, Operation, ReadXml, ReplyData, WriteXml};
 #[derive(Debug, Default, Clone)]
 pub struct GetConfig {
     source: Datastore,
-    filter: Option<String>,
+    filter: Option<Filter>,
 }
 
 impl Operation for GetConfig {
@@ -28,14 +28,7 @@ impl WriteXml for GetConfig {
                     .create_element("source")
                     .write_inner_content(|writer| self.source.write_xml(writer.get_mut()))?;
                 if let Some(ref filter) = self.filter {
-                    _ = writer
-                        .create_element("filter")
-                        .write_inner_content(|writer| {
-                            writer
-                                .get_mut()
-                                .write_all(filter.as_bytes())
-                                .map_err(|err| Error::RpcRequestSerialization(err.into()))
-                        })?;
+                    filter.write_xml(writer.get_mut())?;
                 };
                 Ok::<_, Self::Error>(())
             })?;
@@ -44,10 +37,35 @@ impl WriteXml for GetConfig {
 }
 
 #[derive(Debug, Clone)]
+pub enum Filter {
+    Subtree(String),
+}
+
+impl WriteXml for Filter {
+    type Error = Error;
+
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+        let mut writer = Writer::new(writer);
+        let elem = writer.create_element("filter");
+        _ = match self {
+            Self::Subtree(filter) => elem
+                .with_attribute(("type", "subtree"))
+                .write_inner_content(|writer| {
+                    writer
+                        .get_mut()
+                        .write_all(filter.as_bytes())
+                        .map_err(|err| Error::RpcRequestSerialization(err.into()))
+                })?,
+        };
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Builder<'a> {
     ctx: &'a Context,
     source: Option<Datastore>,
-    filter: Option<String>,
+    filter: Option<Filter>,
 }
 
 impl Builder<'_> {
@@ -58,7 +76,7 @@ impl Builder<'_> {
     }
 
     #[must_use]
-    pub fn filter(mut self, filter: Option<String>) -> Self {
+    pub fn filter(mut self, filter: Option<Filter>) -> Self {
         self.filter = filter;
         self
     }
