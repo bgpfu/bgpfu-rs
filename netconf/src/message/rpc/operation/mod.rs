@@ -9,8 +9,8 @@ use crate::{
 use quick_xml::Writer;
 
 pub trait Operation: Debug + WriteXml + Send + Sync + Sized {
-    type Builder<'a>: Debug + Builder<'a, Self>;
-    type ReplyData: Debug + ReadXml;
+    type Builder<'a>: Builder<'a, Self>;
+    type ReplyData: ReplyData;
 
     fn new<'a, F>(ctx: &'a Context, build_fn: F) -> Result<Self, Error>
     where
@@ -20,7 +20,7 @@ pub trait Operation: Debug + WriteXml + Send + Sync + Sized {
     }
 }
 
-pub trait Builder<'a, O: Operation>: Sized {
+pub trait Builder<'a, O: Operation>: Debug + Sized {
     fn new(ctx: &'a Context) -> Self;
 
     fn finish(self) -> Result<O, Error>;
@@ -31,6 +31,13 @@ pub trait Builder<'a, O: Operation>: Sized {
     {
         build_fn(self)
     }
+}
+
+pub trait ReplyData: Debug + ReadXml + Sized {
+    type Ok;
+
+    fn from_ok() -> Result<Self::Ok, Error>;
+    fn into_result(self) -> Result<Self::Ok, Error>;
 }
 
 pub mod get_config;

@@ -44,11 +44,7 @@ async fn main() -> anyhow::Result<()> {
             .await?,
         session.close().await?
     )?;
-    if let Some(config) = config {
-        println!("{config}");
-    } else {
-        anyhow::bail!("expected config data")
-    };
+    println!("{config}");
     Ok(())
 }
 

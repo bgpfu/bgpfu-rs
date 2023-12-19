@@ -4,7 +4,7 @@ use quick_xml::{events::BytesStart, NsReader, Writer};
 
 use crate::{session::Context, Error};
 
-use super::{Datastore, Operation, ReadXml, WriteXml};
+use super::{Datastore, Operation, ReadXml, ReplyData, WriteXml};
 
 #[derive(Debug, Default, Clone)]
 pub struct GetConfig {
@@ -96,6 +96,18 @@ impl ReadXml for Reply {
         let end = start.to_end();
         let inner = reader.read_text(end.name())?.into();
         Ok(Self { inner })
+    }
+}
+
+impl ReplyData for Reply {
+    type Ok = Self;
+
+    fn from_ok() -> Result<Self::Ok, Error> {
+        Err(Error::EmptyRpcReply)
+    }
+
+    fn into_result(self) -> Result<Self::Ok, Error> {
+        Ok(self)
     }
 }
 

@@ -92,4 +92,7 @@ pub enum Error {
 
     #[error(transparent)]
     InvalidDnsName(#[from] rustls_pki_types::InvalidDnsNameError),
+
+    #[error("unexpected empty rpc-reply")]
+    EmptyRpcReply,
 }

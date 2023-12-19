@@ -13,6 +13,7 @@ pub use self::error::{Error, Errors};
 
 pub mod operation;
 pub use self::operation::Operation;
+use self::operation::ReplyData;
 
 #[derive(Debug, Default, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct MessageId(usize);
@@ -141,12 +142,10 @@ pub struct Reply<O: Operation> {
 }
 
 impl<O: Operation> Reply<O> {
-    pub(crate) fn into_result(self) -> Result<Option<O::ReplyData>, crate::Error> {
-        // TODO:
-        // Find a way to unify `Ok` and `Data` without wrapping in an `Option`
+    pub(crate) fn into_result(self) -> Result<<O::ReplyData as ReplyData>::Ok, crate::Error> {
         match self.inner {
-            ReplyInner::Ok => Ok(None),
-            ReplyInner::Data(data) => Ok(Some(data)),
+            ReplyInner::Ok => O::ReplyData::from_ok(),
+            ReplyInner::Data(data) => data.into_result(),
             ReplyInner::RpcError(errors) => Err(errors.into()),
         }
     }
@@ -255,6 +254,18 @@ impl ReadXml for Empty {
     type Error = Infallible;
 
     fn read_xml(_: &mut NsReader<&[u8]>, _: &BytesStart<'_>) -> Result<Self, Self::Error> {
+        unreachable!()
+    }
+}
+
+impl ReplyData for Empty {
+    type Ok = ();
+
+    fn from_ok() -> Result<Self::Ok, crate::Error> {
+        Ok(())
+    }
+
+    fn into_result(self) -> Result<Self::Ok, crate::Error> {
         unreachable!()
     }
 }
@@ -407,6 +418,18 @@ mod tests {
             Ok(Self(result.ok_or_else(|| {
                 crate::Error::MissingElement("rpc-reply", "<result>")
             })?))
+        }
+    }
+
+    impl ReplyData for BarReply {
+        type Ok = Self;
+
+        fn from_ok() -> Result<Self::Ok, crate::Error> {
+            Err(crate::Error::EmptyRpcReply)
+        }
+
+        fn into_result(self) -> Result<Self::Ok, crate::Error> {
+            Ok(self)
         }
     }
 

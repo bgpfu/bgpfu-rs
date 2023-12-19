@@ -16,7 +16,7 @@ use crate::{
     message::{
         rpc::{
             self,
-            operation::{Builder, CloseSession, Datastore},
+            operation::{Builder, CloseSession, ReplyData},
         },
         ClientHello, ClientMsg, ServerHello, ServerMsg,
     },
@@ -181,7 +181,7 @@ impl<T: Transport> Session<T> {
     pub async fn rpc<O, F>(
         &mut self,
         build_fn: F,
-    ) -> Result<impl Future<Output = Result<Option<O::ReplyData>, Error>>, Error>
+    ) -> Result<impl Future<Output = Result<<O::ReplyData as ReplyData>::Ok, Error>>, Error>
     where
         O: rpc::Operation,
         // TODO: consider whether F should be Fn or FnOnce
@@ -238,6 +238,6 @@ impl<T: Transport> Session<T> {
     pub async fn close(mut self) -> Result<impl Future<Output = Result<(), Error>>, Error> {
         self.rpc::<CloseSession, _>(Builder::finish)
             .await
-            .map(|fut| async move { fut.await.map(|_| drop(self)) })
+            .map(|fut| async move { fut.await.map(|()| drop(self)) })
     }
 }
