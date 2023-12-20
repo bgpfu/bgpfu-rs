@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::{io::Write, time::Duration};
 
 use quick_xml::Writer;
 
@@ -8,7 +8,8 @@ use super::{Operation, WriteXml};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Commit {
-    _inner: (),
+    confirmed: bool,
+    confirm_timeout: Timeout,
 }
 
 impl Operation for Commit {
@@ -20,29 +21,34 @@ impl WriteXml for Commit {
     type Error = Error;
 
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
-        _ = Writer::new(writer).create_element("commit").write_empty()?;
+        let mut writer = Writer::new(writer);
+        let elem = writer.create_element("commit");
+        if self.confirmed {
+            _ = elem.write_inner_content(|writer| {
+                _ = writer.create_element("confirmed").write_empty()?;
+                if self.confirm_timeout != Timeout::default() {
+                    _ = writer
+                        .create_element("confirm-timeout")
+                        .write_inner_content(|writer| {
+                            write!(writer.get_mut(), "{}", self.confirm_timeout.0.as_secs())?;
+                            Ok::<_, Error>(())
+                        })?;
+                };
+                Ok::<_, Error>(())
+            })?;
+        } else {
+            _ = elem.write_empty()?;
+        };
         Ok(())
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct DiscardChanges {
-    _inner: (),
-}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Timeout(Duration);
 
-impl Operation for DiscardChanges {
-    type Builder<'a> = Builder<'a>;
-    type ReplyData = Empty;
-}
-
-impl WriteXml for DiscardChanges {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
-        _ = Writer::new(writer)
-            .create_element("discard-changes")
-            .write_empty()?;
-        Ok(())
+impl Default for Timeout {
+    fn default() -> Self {
+        Self(Duration::from_secs(600))
     }
 }
 
@@ -50,37 +56,61 @@ impl WriteXml for DiscardChanges {
 #[must_use]
 pub struct Builder<'a> {
     ctx: &'a Context,
+    confirmed: bool,
+    confirm_timeout: Timeout,
 }
 
 impl Builder<'_> {
-    fn check_capabilities(&self, operation_name: &'static str) -> Result<(), Error> {
+    pub fn confirmed(mut self, confirmed: bool) -> Result<Self, Error> {
+        if confirmed && !self.can_use_confirmed() {
+            Err(Error::UnsupportedOperationParameter(
+                "<commit>",
+                "<confirmed/>",
+                Capability::ConfirmedCommit,
+            ))
+        } else {
+            self.confirmed = confirmed;
+            Ok(self)
+        }
+    }
+
+    pub fn confirm_timeout(mut self, timeout: Duration) -> Result<Self, Error> {
+        if self.can_use_confirmed() {
+            self.confirm_timeout = Timeout(timeout);
+            Ok(self)
+        } else {
+            Err(Error::UnsupportedOperationParameter(
+                "<commit>",
+                "<confirm-timeout>",
+                Capability::ConfirmedCommit,
+            ))
+        }
+    }
+
+    fn can_use_confirmed(&self) -> bool {
         self.ctx
             .server_capabilities()
-            .contains(&Capability::Candidate)
-            .then_some(())
-            .ok_or_else(|| Error::UnsupportedOperation(operation_name, Capability::Candidate))
+            .contains(&Capability::ConfirmedCommit)
     }
 }
 
 impl<'a> super::Builder<'a, Commit> for Builder<'a> {
     fn new(ctx: &'a Context) -> Self {
-        Self { ctx }
+        Self {
+            ctx,
+            confirmed: false,
+            confirm_timeout: Timeout::default(),
+        }
     }
 
     fn finish(self) -> Result<Commit, Error> {
-        self.check_capabilities("<commit/>")
-            .map(|()| Commit { _inner: () })
-    }
-}
-
-impl<'a> super::Builder<'a, DiscardChanges> for Builder<'a> {
-    fn new(ctx: &'a Context) -> Self {
-        Self { ctx }
-    }
-
-    fn finish(self) -> Result<DiscardChanges, Error> {
-        self.check_capabilities("<discard-changes/>")
-            .map(|()| DiscardChanges { _inner: () })
+        self.ctx
+            .try_operation(Capability::Candidate, "<commit/>", || {
+                Ok(Commit {
+                    confirmed: self.confirmed,
+                    confirm_timeout: self.confirm_timeout,
+                })
+            })
     }
 }
 
@@ -93,22 +123,41 @@ mod tests {
     };
 
     #[test]
-    fn commit_request_to_xml() {
+    fn unconfirmed_request_to_xml() {
         let req = Request {
             message_id: MessageId(101),
-            operation: Commit { _inner: () },
+            operation: Commit {
+                confirmed: false,
+                confirm_timeout: Timeout::default(),
+            },
         };
         let expect = r#"<rpc message-id="101"><commit/></rpc>]]>]]>"#;
         assert_eq!(req.to_xml().unwrap(), expect);
     }
 
     #[test]
-    fn discard_changes_request_to_xml() {
+    fn confirmed_request_to_xml() {
         let req = Request {
             message_id: MessageId(101),
-            operation: DiscardChanges { _inner: () },
+            operation: Commit {
+                confirmed: true,
+                confirm_timeout: Timeout::default(),
+            },
         };
-        let expect = r#"<rpc message-id="101"><discard-changes/></rpc>]]>]]>"#;
+        let expect = r#"<rpc message-id="101"><commit><confirmed/></commit></rpc>]]>]]>"#;
+        assert_eq!(req.to_xml().unwrap(), expect);
+    }
+
+    #[test]
+    fn confirmed_with_timeout_request_to_xml() {
+        let req = Request {
+            message_id: MessageId(101),
+            operation: Commit {
+                confirmed: true,
+                confirm_timeout: Timeout(Duration::from_secs(60)),
+            },
+        };
+        let expect = r#"<rpc message-id="101"><commit><confirmed/><confirm-timeout>60</confirm-timeout></commit></rpc>]]>]]>"#;
         assert_eq!(req.to_xml().unwrap(), expect);
     }
 }

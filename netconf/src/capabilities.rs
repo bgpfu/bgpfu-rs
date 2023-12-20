@@ -106,6 +106,8 @@ mod uri {
     pub(super) const WRITABLE_RUNNING_V1_0: &str =
         "urn:ietf:params:netconf:capability:writable-running:1.0";
     pub(super) const CANDIDATE_V1_0: &str = "urn:ietf:params:netconf:capability:candidate:1.0";
+    pub(super) const CONFIRMED_COMMIT_V1_0: &str =
+        "urn:ietf:params:netconf:capability:confirmed-commit:1.0";
 }
 
 #[allow(variant_size_differences)]
@@ -114,6 +116,7 @@ pub enum Capability {
     Base(Base),
     WritableRunning,
     Candidate,
+    ConfirmedCommit,
     Unknown(String),
 }
 
@@ -125,6 +128,7 @@ impl Capability {
             uri::BASE_V1_1 => Ok(Self::Base(Base::V1_1)),
             uri::WRITABLE_RUNNING_V1_0 => Ok(Self::WritableRunning),
             uri::CANDIDATE_V1_0 => Ok(Self::Candidate),
+            uri::CONFIRMED_COMMIT_V1_0 => Ok(Self::ConfirmedCommit),
             _ => Ok(Self::Unknown(uri.to_string())),
         }
     }
@@ -135,6 +139,7 @@ impl Capability {
             Self::Base(base) => base.uri(),
             Self::WritableRunning => uri::WRITABLE_RUNNING_V1_0,
             Self::Candidate => uri::CANDIDATE_V1_0,
+            Self::ConfirmedCommit => uri::CONFIRMED_COMMIT_V1_0,
             Self::Unknown(uri) => uri.as_str(),
         }
     }

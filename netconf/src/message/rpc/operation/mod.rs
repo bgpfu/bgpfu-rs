@@ -67,7 +67,11 @@ pub use self::kill_session::KillSession;
 
 pub mod commit;
 #[doc(inline)]
-pub use self::commit::{Commit, DiscardChanges};
+pub use self::commit::Commit;
+
+pub mod discard_changes;
+#[doc(inline)]
+pub use self::discard_changes::DiscardChanges;
 
 pub(crate) mod close_session;
 pub(crate) use self::close_session::CloseSession;
