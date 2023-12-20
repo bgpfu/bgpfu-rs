@@ -4,7 +4,7 @@ use clap_verbosity_flag::{Verbosity, WarnLevel};
 use simplelog::{ColorChoice, TermLogger, TerminalMode};
 
 use netconf::{
-    message::rpc::operation::{get_config::Filter, Builder, Datastore, GetConfig},
+    message::rpc::operation::{get::Filter, Builder, Datastore, GetConfig},
     transport::Password,
     Session,
 };
@@ -38,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
     let (config, _) = tokio::try_join!(
         session
             .rpc::<GetConfig, _>(|builder| builder
-                .source(Datastore::Running)
+                .source(Datastore::Running)?
                 .filter(Some(Filter::Subtree(
                     "<configuration><system/></configuration>".to_string()
                 )))

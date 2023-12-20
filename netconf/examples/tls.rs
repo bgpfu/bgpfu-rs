@@ -35,7 +35,7 @@ async fn main() -> anyhow::Result<()> {
         .context("failed to establish netconf session")?;
     let (config, _) = tokio::try_join!(
         session
-            .rpc::<GetConfig, _>(|builder| builder.source(Datastore::Running).finish())
+            .rpc::<GetConfig, _>(|builder| builder.source(Datastore::Running)?.finish())
             .await?,
         session.close().await?
     )?;

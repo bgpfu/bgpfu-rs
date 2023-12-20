@@ -95,4 +95,13 @@ pub enum Error {
 
     #[error("unexpected empty rpc-reply")]
     EmptyRpcReply,
+
+    #[error("deleting the <running> datastore is not permitted")]
+    DeleteRunningConfig,
+
+    #[error("invalid session-id: {0}")]
+    InvalidSessionId(u32),
+
+    #[error("kill-session operation targeting the current session is not permitted")]
+    KillCurrentSession,
 }

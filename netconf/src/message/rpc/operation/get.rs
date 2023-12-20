@@ -7,13 +7,40 @@ use crate::{session::Context, Error};
 use super::{Datastore, Operation, ReadXml, ReplyData, WriteXml};
 
 #[derive(Debug, Default, Clone)]
+pub struct Get {
+    filter: Option<Filter>,
+}
+
+impl Operation for Get {
+    type Builder<'a> = GetBuilder;
+    type ReplyData = Reply;
+}
+
+impl WriteXml for Get {
+    type Error = Error;
+
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+        _ = Writer::new(writer)
+            .create_element("get")
+            .write_inner_content(|writer| {
+                if let Some(ref filter) = self.filter {
+                    filter.write_xml(writer.get_mut())?;
+                };
+                Ok::<_, Self::Error>(())
+            })?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+#[allow(clippy::module_name_repetitions)]
 pub struct GetConfig {
     source: Datastore,
     filter: Option<Filter>,
 }
 
 impl Operation for GetConfig {
-    type Builder<'a> = Builder<'a>;
+    type Builder<'a> = GetConfigBuilder<'a>;
     type ReplyData = Reply;
 }
 
@@ -62,27 +89,55 @@ impl WriteXml for Filter {
 }
 
 #[derive(Debug, Clone)]
-pub struct Builder<'a> {
-    ctx: &'a Context,
-    source: Option<Datastore>,
+#[must_use]
+#[allow(clippy::module_name_repetitions)]
+pub struct GetBuilder {
     filter: Option<Filter>,
 }
 
-impl Builder<'_> {
-    #[must_use]
-    pub const fn source(mut self, source: Datastore) -> Self {
-        self.source = Some(source);
-        self
-    }
-
-    #[must_use]
+impl GetBuilder {
     pub fn filter(mut self, filter: Option<Filter>) -> Self {
         self.filter = filter;
         self
     }
 }
 
-impl<'a> super::Builder<'a, GetConfig> for Builder<'a> {
+impl super::Builder<'_, Get> for GetBuilder {
+    fn new(_: &Context) -> Self {
+        Self { filter: None }
+    }
+
+    fn finish(self) -> Result<Get, Error> {
+        Ok(Get {
+            filter: self.filter,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+#[must_use]
+#[allow(clippy::module_name_repetitions)]
+pub struct GetConfigBuilder<'a> {
+    ctx: &'a Context,
+    source: Option<Datastore>,
+    filter: Option<Filter>,
+}
+
+impl GetConfigBuilder<'_> {
+    pub fn source(mut self, source: Datastore) -> Result<Self, Error> {
+        source.try_as_source(self.ctx).map(|source| {
+            self.source = Some(source);
+            self
+        })
+    }
+
+    pub fn filter(mut self, filter: Option<Filter>) -> Self {
+        self.filter = filter;
+        self
+    }
+}
+
+impl<'a> super::Builder<'a, GetConfig> for GetConfigBuilder<'a> {
     fn new(ctx: &'a Context) -> Self {
         Self {
             ctx,

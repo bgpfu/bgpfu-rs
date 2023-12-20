@@ -40,31 +40,53 @@ pub trait ReplyData: Debug + ReadXml + Sized {
     fn into_result(self) -> Result<Self::Ok, Error>;
 }
 
-pub mod get_config;
+pub mod get;
 #[doc(inline)]
-pub use self::get_config::GetConfig;
+pub use self::get::{Get, GetConfig};
 
 pub mod edit_config;
 #[doc(inline)]
 pub use self::edit_config::EditConfig;
 
+pub mod copy_config;
+#[doc(inline)]
+pub use self::copy_config::CopyConfig;
+
+pub mod delete_config;
+#[doc(inline)]
+pub use self::delete_config::DeleteConfig;
+
+pub mod lock;
+#[doc(inline)]
+pub use self::lock::{Lock, Unlock};
+
+pub mod kill_session;
+#[doc(inline)]
+pub use self::kill_session::KillSession;
+
 pub(crate) mod close_session;
 pub(crate) use self::close_session::CloseSession;
-
-// TODO:
-// implement remaining base rpc operations:
-// - get
-// - edit-config
-// - copy-config
-// - delete-config
-// - lock
-// - unlock
-// - kill-session
 
 #[derive(Debug, Default, Copy, Clone)]
 pub enum Datastore {
     #[default]
     Running,
+}
+
+impl Datastore {
+    const fn try_as_source(self, _: &Context) -> Result<Self, Error> {
+        match self {
+            Self::Running => Ok(self),
+        }
+    }
+
+    fn try_as_target(self, ctx: &Context) -> Result<Self, Error> {
+        todo!()
+    }
+
+    fn try_as_lock_target(self, ctx: &Context) -> Result<Self, Error> {
+        todo!()
+    }
 }
 
 impl WriteXml for Datastore {
