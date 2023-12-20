@@ -1,6 +1,7 @@
 use std::{fmt::Debug, io::Write};
 
 use crate::{
+    capabilities::Capability,
     message::{ReadXml, WriteXml},
     session::Context,
     Error,
@@ -64,6 +65,10 @@ pub mod kill_session;
 #[doc(inline)]
 pub use self::kill_session::KillSession;
 
+pub mod commit;
+#[doc(inline)]
+pub use self::commit::{Commit, DiscardChanges};
+
 pub(crate) mod close_session;
 pub(crate) use self::close_session::CloseSession;
 
@@ -71,21 +76,59 @@ pub(crate) use self::close_session::CloseSession;
 pub enum Datastore {
     #[default]
     Running,
+    Candidate,
 }
 
 impl Datastore {
-    const fn try_as_source(self, _: &Context) -> Result<Self, Error> {
-        match self {
-            Self::Running => Ok(self),
-        }
+    fn try_as_source(self, ctx: &Context) -> Result<Self, Error> {
+        let required_capability = match self {
+            Self::Running => None,
+            Self::Candidate => Some(Capability::Candidate),
+        };
+        required_capability.map_or_else(
+            || Ok(self),
+            |capability| {
+                if ctx.server_capabilities().contains(&capability) {
+                    Ok(self)
+                } else {
+                    Err(Error::UnsupportedSource(self, Some(capability)))
+                }
+            },
+        )
     }
 
     fn try_as_target(self, ctx: &Context) -> Result<Self, Error> {
-        todo!()
+        let required_capability = match self {
+            Self::Running => Some(Capability::WritableRunning),
+            Self::Candidate => Some(Capability::Candidate),
+        };
+        required_capability.map_or_else(
+            || Ok(self),
+            |capability| {
+                if ctx.server_capabilities().contains(&capability) {
+                    Ok(self)
+                } else {
+                    Err(Error::UnsupportedTarget(self, Some(capability)))
+                }
+            },
+        )
     }
 
     fn try_as_lock_target(self, ctx: &Context) -> Result<Self, Error> {
-        todo!()
+        let required_capability = match self {
+            Self::Running => None,
+            Self::Candidate => Some(Capability::Candidate),
+        };
+        required_capability.map_or_else(
+            || Ok(self),
+            |capability| {
+                if ctx.server_capabilities().contains(&capability) {
+                    Ok(self)
+                } else {
+                    Err(Error::UnsupportedLockTarget(self, Some(capability)))
+                }
+            },
+        )
     }
 }
 
@@ -96,6 +139,7 @@ impl WriteXml for Datastore {
         let mut writer = Writer::new(writer);
         _ = match self {
             Self::Running => writer.create_element("running").write_empty()?,
+            Self::Candidate => writer.create_element("candidate").write_empty()?,
         };
         Ok(())
     }

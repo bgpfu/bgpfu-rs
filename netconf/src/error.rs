@@ -1,7 +1,10 @@
 use bytes::Bytes;
 use tokio::sync::mpsc;
 
-use crate::message::rpc;
+use crate::{
+    capabilities::Capability,
+    message::rpc::{self, operation::Datastore},
+};
 
 /// `netconf` Error variants
 #[derive(Debug, thiserror::Error)]
@@ -104,4 +107,16 @@ pub enum Error {
 
     #[error("kill-session operation targeting the current session is not permitted")]
     KillCurrentSession,
+
+    #[error("unsupported rpc operation '{0}' (requires capability '{1:?}')")]
+    UnsupportedOperation(&'static str, Capability),
+
+    #[error("unsupported source datastore '{0:?}' (requires capability '{1:?}')")]
+    UnsupportedSource(Datastore, Option<Capability>),
+
+    #[error("unsupported target datastore '{0:?}' (requires capability '{1:?}')")]
+    UnsupportedTarget(Datastore, Option<Capability>),
+
+    #[error("unsupported lock target datastore '{0:?}' (requires capability '{1:?}')")]
+    UnsupportedLockTarget(Datastore, Option<Capability>),
 }
