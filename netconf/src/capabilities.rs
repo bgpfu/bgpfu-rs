@@ -110,6 +110,7 @@ mod uri {
         "urn:ietf:params:netconf:capability:confirmed-commit:1.0";
     pub(super) const ROLLBACK_ON_ERROR_V1_0: &str =
         "urn:ietf:params:netconf:capability:rollback-on-error:1.0";
+    pub(super) const VALIDATE_V1_0: &str = "urn:ietf:params:netconf:capability:validate:1.0";
 }
 
 #[allow(variant_size_differences)]
@@ -120,6 +121,7 @@ pub enum Capability {
     Candidate,
     ConfirmedCommit,
     RollbackOnError,
+    Validate,
     Unknown(String),
 }
 
@@ -133,6 +135,7 @@ impl Capability {
             uri::CANDIDATE_V1_0 => Ok(Self::Candidate),
             uri::CONFIRMED_COMMIT_V1_0 => Ok(Self::ConfirmedCommit),
             uri::ROLLBACK_ON_ERROR_V1_0 => Ok(Self::RollbackOnError),
+            uri::VALIDATE_V1_0 => Ok(Self::Validate),
             _ => Ok(Self::Unknown(uri.to_string())),
         }
     }
@@ -145,6 +148,7 @@ impl Capability {
             Self::Candidate => uri::CANDIDATE_V1_0,
             Self::ConfirmedCommit => uri::CONFIRMED_COMMIT_V1_0,
             Self::RollbackOnError => uri::ROLLBACK_ON_ERROR_V1_0,
+            Self::Validate => uri::VALIDATE_V1_0,
             Self::Unknown(uri) => uri.as_str(),
         }
     }

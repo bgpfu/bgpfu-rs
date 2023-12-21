@@ -73,6 +73,10 @@ pub mod discard_changes;
 #[doc(inline)]
 pub use self::discard_changes::DiscardChanges;
 
+pub mod validate;
+#[doc(inline)]
+pub use self::validate::Validate;
+
 pub(crate) mod close_session;
 pub(crate) use self::close_session::CloseSession;
 
@@ -144,6 +148,33 @@ impl WriteXml for Datastore {
         _ = match self {
             Self::Running => writer.create_element("running").write_empty()?,
             Self::Candidate => writer.create_element("candidate").write_empty()?,
+        };
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Source {
+    Datastore(Datastore),
+    Config(String),
+}
+
+impl WriteXml for Source {
+    type Error = Error;
+
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+        match self {
+            Self::Datastore(datastore) => datastore.write_xml(writer)?,
+            Self::Config(config) => {
+                _ = Writer::new(writer)
+                    .create_element("config")
+                    .write_inner_content(|writer| {
+                        writer
+                            .get_mut()
+                            .write_all(config.as_bytes())
+                            .map_err(|err| Error::RpcRequestSerialization(err.into()))
+                    })?;
+            }
         };
         Ok(())
     }

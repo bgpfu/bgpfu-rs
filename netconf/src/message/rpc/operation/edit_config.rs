@@ -12,7 +12,7 @@ pub struct EditConfig {
     source: Source,
     default_operation: DefaultOperation,
     error_option: ErrorOption,
-    test_option: Option<TestOption>,
+    test_option: TestOption,
 }
 
 impl Operation for EditConfig {
@@ -46,10 +46,13 @@ impl WriteXml for EditConfig {
                             Ok::<_, Error>(())
                         })?;
                 };
-                // TODO
-                #[allow(clippy::redundant_pattern_matching)]
-                if let Some(_) = self.test_option {
-                    unreachable!();
+                if self.test_option.is_non_default() {
+                    _ = writer
+                        .create_element("test-option")
+                        .write_inner_content(|writer| {
+                            write!(writer.get_mut(), "{}", self.test_option.as_str())?;
+                            Ok::<_, Error>(())
+                        })?;
                 };
                 self.source.write_xml(writer.get_mut())?;
                 Ok::<_, Self::Error>(())
@@ -66,7 +69,7 @@ pub struct Builder<'a> {
     source: Option<Source>,
     default_operation: DefaultOperation,
     error_option: ErrorOption,
-    test_option: Option<TestOption>,
+    test_option: TestOption,
 }
 
 impl Builder<'_> {
@@ -94,8 +97,11 @@ impl Builder<'_> {
         })
     }
 
-    pub fn test_option(mut self, test_option: Option<TestOption>) -> Result<Self, Error> {
-        todo!()
+    pub fn test_option(mut self, test_option: TestOption) -> Result<Self, Error> {
+        test_option.try_use(self.ctx).map(|test_option| {
+            self.test_option = test_option;
+            self
+        })
     }
 }
 
@@ -107,7 +113,7 @@ impl<'a> super::Builder<'a, EditConfig> for Builder<'a> {
             source: None,
             default_operation: DefaultOperation::default(),
             error_option: ErrorOption::default(),
-            test_option: None,
+            test_option: TestOption::default(),
         }
     }
 
@@ -176,20 +182,48 @@ impl DefaultOperation {
     }
 }
 
-// TODO: requires :validate:1.1 capability
-#[derive(Debug, /* Default, */ Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum TestOption {
-    // #[default]
-    // TestThenSet,
-    // Set,
+    #[default]
+    TestThenSet,
+    Set,
+    // TODO: requires :validate:1.1 capability
     // TestOnly,
 }
 
-// impl TestOption {
-//     fn is_non_default(self) -> bool {
-//         self != Self::default()
-//     }
-// }
+impl TestOption {
+    fn is_non_default(self) -> bool {
+        self != Self::default()
+    }
+
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::TestThenSet => "test-then-set",
+            Self::Set => "set",
+        }
+    }
+
+    fn try_use(self, ctx: &Context) -> Result<Self, Error> {
+        let required_capability = match self {
+            Self::TestThenSet | Self::Set => Some(Capability::Validate),
+        };
+        required_capability.map_or_else(
+            || Ok(self),
+            |capability| {
+                if ctx.server_capabilities().contains(&capability) {
+                    Ok(self)
+                } else {
+                    Err(Error::UnsupportedOperParameterValue(
+                        "<edit-config>",
+                        "<test-option>",
+                        self.as_str(),
+                        capability,
+                    ))
+                }
+            },
+        )
+    }
+}
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorOption {
@@ -252,7 +286,7 @@ mod tests {
                 source: Source::Config("<foo>bar</foo>".to_string()),
                 default_operation: DefaultOperation::default(),
                 error_option: ErrorOption::default(),
-                test_option: None,
+                test_option: TestOption::default(),
             },
         };
         let expect = r#"<rpc message-id="101"><edit-config><target><running/></target><config><foo>bar</foo></config></edit-config></rpc>]]>]]>"#;
