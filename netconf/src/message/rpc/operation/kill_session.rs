@@ -8,7 +8,7 @@ use crate::{
     Error,
 };
 
-use super::{Datastore, Operation, WriteXml};
+use super::{Operation, WriteXml};
 
 #[derive(Debug, Clone, Copy)]
 pub struct KillSession {

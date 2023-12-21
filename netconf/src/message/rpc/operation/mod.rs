@@ -95,7 +95,7 @@ impl Datastore {
                 if ctx.server_capabilities().contains(&capability) {
                     Ok(self)
                 } else {
-                    Err(Error::UnsupportedSource(self, Some(capability)))
+                    Err(Error::UnsupportedSource(self, capability))
                 }
             },
         )
@@ -112,7 +112,7 @@ impl Datastore {
                 if ctx.server_capabilities().contains(&capability) {
                     Ok(self)
                 } else {
-                    Err(Error::UnsupportedTarget(self, Some(capability)))
+                    Err(Error::UnsupportedTarget(self, capability))
                 }
             },
         )
@@ -129,7 +129,7 @@ impl Datastore {
                 if ctx.server_capabilities().contains(&capability) {
                     Ok(self)
                 } else {
-                    Err(Error::UnsupportedLockTarget(self, Some(capability)))
+                    Err(Error::UnsupportedLockTarget(self, capability))
                 }
             },
         )

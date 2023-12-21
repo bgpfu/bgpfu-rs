@@ -115,11 +115,11 @@ pub enum Error {
     UnsupportedOperationParameter(&'static str, &'static str, Capability),
 
     #[error("unsupported source datastore '{0:?}' (requires capability '{1:?}')")]
-    UnsupportedSource(Datastore, Option<Capability>),
+    UnsupportedSource(Datastore, Capability),
 
     #[error("unsupported target datastore '{0:?}' (requires capability '{1:?}')")]
-    UnsupportedTarget(Datastore, Option<Capability>),
+    UnsupportedTarget(Datastore, Capability),
 
     #[error("unsupported lock target datastore '{0:?}' (requires capability '{1:?}')")]
-    UnsupportedLockTarget(Datastore, Option<Capability>),
+    UnsupportedLockTarget(Datastore, Capability),
 }
