@@ -85,6 +85,7 @@ pub enum Datastore {
     #[default]
     Running,
     Candidate,
+    Startup,
 }
 
 impl Datastore {
@@ -92,6 +93,7 @@ impl Datastore {
         let required_capability = match self {
             Self::Running => None,
             Self::Candidate => Some(Capability::Candidate),
+            Self::Startup => Some(Capability::Startup),
         };
         required_capability.map_or_else(
             || Ok(self),
@@ -109,6 +111,7 @@ impl Datastore {
         let required_capability = match self {
             Self::Running => Some(Capability::WritableRunning),
             Self::Candidate => Some(Capability::Candidate),
+            Self::Startup => Some(Capability::Startup),
         };
         required_capability.map_or_else(
             || Ok(self),
@@ -126,6 +129,7 @@ impl Datastore {
         let required_capability = match self {
             Self::Running => None,
             Self::Candidate => Some(Capability::Candidate),
+            Self::Startup => Some(Capability::Startup),
         };
         required_capability.map_or_else(
             || Ok(self),
@@ -148,6 +152,7 @@ impl WriteXml for Datastore {
         _ = match self {
             Self::Running => writer.create_element("running").write_empty()?,
             Self::Candidate => writer.create_element("candidate").write_empty()?,
+            Self::Startup => writer.create_element("startup").write_empty()?,
         };
         Ok(())
     }
