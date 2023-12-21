@@ -108,6 +108,8 @@ mod uri {
     pub(super) const CANDIDATE_V1_0: &str = "urn:ietf:params:netconf:capability:candidate:1.0";
     pub(super) const CONFIRMED_COMMIT_V1_0: &str =
         "urn:ietf:params:netconf:capability:confirmed-commit:1.0";
+    pub(super) const ROLLBACK_ON_ERROR_V1_0: &str =
+        "urn:ietf:params:netconf:capability:rollback-on-error:1.0";
 }
 
 #[allow(variant_size_differences)]
@@ -117,6 +119,7 @@ pub enum Capability {
     WritableRunning,
     Candidate,
     ConfirmedCommit,
+    RollbackOnError,
     Unknown(String),
 }
 
@@ -129,6 +132,7 @@ impl Capability {
             uri::WRITABLE_RUNNING_V1_0 => Ok(Self::WritableRunning),
             uri::CANDIDATE_V1_0 => Ok(Self::Candidate),
             uri::CONFIRMED_COMMIT_V1_0 => Ok(Self::ConfirmedCommit),
+            uri::ROLLBACK_ON_ERROR_V1_0 => Ok(Self::RollbackOnError),
             _ => Ok(Self::Unknown(uri.to_string())),
         }
     }
@@ -140,6 +144,7 @@ impl Capability {
             Self::WritableRunning => uri::WRITABLE_RUNNING_V1_0,
             Self::Candidate => uri::CANDIDATE_V1_0,
             Self::ConfirmedCommit => uri::CONFIRMED_COMMIT_V1_0,
+            Self::RollbackOnError => uri::ROLLBACK_ON_ERROR_V1_0,
             Self::Unknown(uri) => uri.as_str(),
         }
     }

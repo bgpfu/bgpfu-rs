@@ -2,7 +2,7 @@ use std::io::Write;
 
 use quick_xml::Writer;
 
-use crate::{message::rpc::Empty, session::Context, Error};
+use crate::{capabilities::Capability, message::rpc::Empty, session::Context, Error};
 
 use super::{Datastore, Operation, WriteXml};
 
@@ -24,33 +24,36 @@ impl WriteXml for EditConfig {
     type Error = Error;
 
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
-        _ =
-            Writer::new(writer)
-                .create_element("edit-config")
-                .write_inner_content(|writer| {
+        _ = Writer::new(writer)
+            .create_element("edit-config")
+            .write_inner_content(|writer| {
+                _ = writer
+                    .create_element("target")
+                    .write_inner_content(|writer| self.target.write_xml(writer.get_mut()))?;
+                if self.default_operation.is_non_default() {
                     _ = writer
-                        .create_element("target")
-                        .write_inner_content(|writer| self.target.write_xml(writer.get_mut()))?;
-                    if self.default_operation.is_non_default() {
-                        _ = writer
-                            .create_element("default-operation")
-                            .write_inner_content(|writer| {
-                                self.default_operation.write_xml(writer.get_mut())
-                            })?;
-                    };
-                    if self.error_option.is_non_default() {
-                        _ = writer.create_element("error-option").write_inner_content(
-                            |writer| self.error_option.write_xml(writer.get_mut()),
-                        )?;
-                    };
-                    // TODO
-                    #[allow(clippy::redundant_pattern_matching)]
-                    if let Some(_) = self.test_option {
-                        unreachable!();
-                    };
-                    self.source.write_xml(writer.get_mut())?;
-                    Ok::<_, Self::Error>(())
-                })?;
+                        .create_element("default-operation")
+                        .write_inner_content(|writer| {
+                            write!(writer.get_mut(), "{}", self.default_operation.as_str())?;
+                            Ok::<_, Error>(())
+                        })?;
+                };
+                if self.error_option.is_non_default() {
+                    _ = writer
+                        .create_element("error-option")
+                        .write_inner_content(|writer| {
+                            write!(writer.get_mut(), "{}", self.error_option.as_str())?;
+                            Ok::<_, Error>(())
+                        })?;
+                };
+                // TODO
+                #[allow(clippy::redundant_pattern_matching)]
+                if let Some(_) = self.test_option {
+                    unreachable!();
+                };
+                self.source.write_xml(writer.get_mut())?;
+                Ok::<_, Self::Error>(())
+            })?;
         Ok(())
     }
 }
@@ -163,19 +166,13 @@ impl DefaultOperation {
     fn is_non_default(self) -> bool {
         self != Self::default()
     }
-}
 
-impl WriteXml for DefaultOperation {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
-        let name = match self {
+    const fn as_str(self) -> &'static str {
+        match self {
             Self::Merge => "merge",
             Self::Replace => "replace",
             Self::None => "none",
-        };
-        _ = Writer::new(writer).create_element(name).write_empty()?;
-        Ok(())
+        }
     }
 }
 
@@ -199,8 +196,7 @@ pub enum ErrorOption {
     #[default]
     StopOnError,
     ContinueOnError,
-    // TODO: requires the :rollback-on-error capability
-    // RollbackOnError,
+    RollbackOnError,
 }
 
 impl ErrorOption {
@@ -208,23 +204,34 @@ impl ErrorOption {
         self != Self::default()
     }
 
-    fn try_use(self, ctx: &Context) -> Result<Self, Error> {
-        todo!()
-    }
-}
-
-impl WriteXml for ErrorOption {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
-        let name = match self {
+    const fn as_str(self) -> &'static str {
+        match self {
             Self::StopOnError => "stop-on-error",
             Self::ContinueOnError => "continue-on-error",
-            // TODO
-            // Self::RollbackOnError => "rollback-on-error",
+            Self::RollbackOnError => "rollback-on-error",
+        }
+    }
+
+    fn try_use(self, ctx: &Context) -> Result<Self, Error> {
+        let required_capability = match self {
+            Self::StopOnError | Self::ContinueOnError => None,
+            Self::RollbackOnError => Some(Capability::RollbackOnError),
         };
-        _ = Writer::new(writer).create_element(name).write_empty()?;
-        Ok(())
+        required_capability.map_or_else(
+            || Ok(self),
+            |capability| {
+                if ctx.server_capabilities().contains(&capability) {
+                    Ok(self)
+                } else {
+                    Err(Error::UnsupportedOperParameterValue(
+                        "<edit-config>",
+                        "<error-option>",
+                        self.as_str(),
+                        capability,
+                    ))
+                }
+            },
+        )
     }
 }
 

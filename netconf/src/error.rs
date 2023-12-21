@@ -114,6 +114,9 @@ pub enum Error {
     #[error("unsupported parameter '{1}' for rpc operation '{0}' (requires capability '{2:?}')")]
     UnsupportedOperationParameter(&'static str, &'static str, Capability),
 
+    #[error("unsupported value '{2}' of parameter '{1}' for rpc operation '{0}' (requires capability '{3:?}')")]
+    UnsupportedOperParameterValue(&'static str, &'static str, &'static str, Capability),
+
     #[error("unsupported source datastore '{0:?}' (requires capability '{1:?}')")]
     UnsupportedSource(Datastore, Capability),
 
