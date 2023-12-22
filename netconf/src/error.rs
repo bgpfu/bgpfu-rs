@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use iri_string::types::UriStr;
 use tokio::sync::mpsc;
 
 use crate::{
@@ -59,6 +60,9 @@ pub enum Error {
 
     #[error("failed to parse message-id")]
     MessageIdParse(#[from] std::num::ParseIntError),
+
+    #[error("failed to parse capability URI")]
+    ParseCapability(#[from] iri_string::validate::Error),
 
     #[error("missing common mandatory capabilities")]
     BaseCapability,
@@ -125,4 +129,7 @@ pub enum Error {
 
     #[error("unsupported lock target datastore '{0:?}' (requires capability '{1:?}')")]
     UnsupportedLockTarget(Datastore, Capability),
+
+    #[error("unsupported scheme in url '{0}' (requires ':url:1.0' capability with corresponding 'scheme' parameter)")]
+    UnsupportedUrlScheme(Box<UriStr>),
 }

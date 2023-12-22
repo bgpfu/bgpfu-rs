@@ -4,7 +4,7 @@ use quick_xml::Writer;
 
 use crate::{capabilities::Capability, message::rpc::Empty, session::Context, Error};
 
-use super::{Datastore, Operation, WriteXml};
+use super::{Datastore, Operation, Url, WriteXml};
 
 #[derive(Debug, Clone)]
 pub struct EditConfig {
@@ -85,6 +85,13 @@ impl Builder<'_> {
         self
     }
 
+    pub fn url<S: AsRef<str>>(mut self, url: S) -> Result<Self, Error> {
+        Url::try_new(url, self.ctx).map(|url| {
+            self.source = Some(Source::Url(url));
+            self
+        })
+    }
+
     pub const fn default_operation(mut self, default_operation: DefaultOperation) -> Self {
         self.default_operation = default_operation;
         self
@@ -137,26 +144,25 @@ impl<'a> super::Builder<'a, EditConfig> for Builder<'a> {
 #[derive(Debug, Clone)]
 pub enum Source {
     Config(String),
+    Url(Url),
 }
 
 impl WriteXml for Source {
     type Error = Error;
 
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
-        let mut writer = Writer::new(writer);
-        _ = match self {
+        match self {
             Self::Config(config) => {
-                writer
+                _ = Writer::new(writer)
                     .create_element("config")
                     .write_inner_content(|writer| {
-                        writer
-                            .get_mut()
-                            .write_all(config.as_bytes())
-                            .map_err(|err| Error::RpcRequestSerialization(err.into()))
-                    })?
+                        write!(writer.get_mut(), "{config}")?;
+                        Ok::<_, Error>(())
+                    })?;
+                Ok(())
             }
-        };
-        Ok(())
+            Self::Url(url) => url.write_xml(writer),
+        }
     }
 }
 

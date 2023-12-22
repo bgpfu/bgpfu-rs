@@ -1,4 +1,8 @@
-use std::{fmt::Debug, io::Write};
+use std::{
+    fmt::{self, Debug, Display},
+    io::Write,
+    sync::Arc,
+};
 
 use crate::{
     capabilities::Capability,
@@ -7,6 +11,7 @@ use crate::{
     Error,
 };
 
+use iri_string::types::UriStr;
 use quick_xml::Writer;
 
 pub trait Operation: Debug + WriteXml + Send + Sync + Sized {
@@ -162,6 +167,7 @@ impl WriteXml for Datastore {
 pub enum Source {
     Datastore(Datastore),
     Config(String),
+    Url(Url),
 }
 
 impl WriteXml for Source {
@@ -180,7 +186,52 @@ impl WriteXml for Source {
                             .map_err(|err| Error::RpcRequestSerialization(err.into()))
                     })?;
             }
+            Self::Url(url) => url.write_xml(writer)?,
         };
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Url {
+    inner: Arc<UriStr>,
+}
+
+impl Url {
+    fn try_new<S: AsRef<str>>(s: S, ctx: &Context) -> Result<Self, Error> {
+        let url = UriStr::new(s.as_ref())?;
+        ctx.server_capabilities()
+            .iter()
+            .filter_map(|capability| {
+                if let Capability::Url(schemes) = capability {
+                    Some(schemes.iter())
+                } else {
+                    None
+                }
+            })
+            .flatten()
+            .find(|&scheme| url.scheme_str() == scheme.as_ref())
+            .ok_or_else(|| Error::UnsupportedUrlScheme(url.into()))
+            .map(|_| Self { inner: url.into() })
+    }
+}
+
+impl Display for Url {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.inner.as_ref(), f)
+    }
+}
+
+impl WriteXml for Url {
+    type Error = Error;
+
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+        _ = Writer::new(writer)
+            .create_element("url")
+            .write_inner_content(|writer| {
+                write!(writer.get_mut(), "{self}")?;
+                Ok::<_, Error>(())
+            })?;
         Ok(())
     }
 }

@@ -18,6 +18,7 @@ tokio.workspace = true
 thiserror.workspace = true
 async-trait = "^0.1"
 bytes = "^1.0"
+iri-string = "^0.7"
 memchr = "^2.0"
 quick-xml = "^0.31"
 russh = "^0.39"

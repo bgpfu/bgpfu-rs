@@ -1,9 +1,12 @@
 use std::{
-    borrow::Borrow,
+    borrow::Cow,
     collections::{BTreeSet, HashSet},
     io::Write,
+    str::FromStr,
+    sync::Arc,
 };
 
+use iri_string::types::UriStr;
 use quick_xml::{
     events::{BytesStart, BytesText, Event},
     name::ResolveResult,
@@ -61,7 +64,7 @@ impl ReadXml for Capabilities {
                     if ns == xmlns::BASE && tag.local_name().as_ref() == b"capability" =>
                 {
                     let span = reader.read_text(tag.to_end().name())?;
-                    _ = inner.insert(Capability::from_uri(span.borrow())?);
+                    _ = inner.insert(span.parse()?);
                 }
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
@@ -112,6 +115,7 @@ mod uri {
         "urn:ietf:params:netconf:capability:rollback-on-error:1.0";
     pub(super) const VALIDATE_V1_0: &str = "urn:ietf:params:netconf:capability:validate:1.0";
     pub(super) const STARTUP_V1_0: &str = "urn:ietf:params:netconf:capability:startup:1.0";
+    pub(super) const URL_V1_0: &str = "urn:ietf:params:netconf:capability:url:1.0";
 }
 
 #[allow(variant_size_differences)]
@@ -124,36 +128,75 @@ pub enum Capability {
     RollbackOnError,
     Validate,
     Startup,
-    Unknown(String),
+    Url(Vec<Box<str>>),
+    Unknown(Arc<UriStr>),
+}
+
+impl FromStr for Capability {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let uri = UriStr::new(s)?;
+        match (
+            uri.scheme_str(),
+            uri.authority_str(),
+            uri.path_str(),
+            uri.query_str(),
+            uri.fragment(),
+        ) {
+            ("urn", None, "ietf:params:netconf:base:1.0", None, None) => Ok(Self::Base(Base::V1_0)),
+            ("urn", None, "ietf:params:netconf:base:1.1", None, None) => Ok(Self::Base(Base::V1_1)),
+            ("urn", None, "ietf:params:netconf:capability:writable-running:1.0", None, None) => {
+                Ok(Self::WritableRunning)
+            }
+            ("urn", None, "ietf:params:netconf:capability:candidate:1.0", None, None) => {
+                Ok(Self::Candidate)
+            }
+            ("urn", None, "ietf:params:netconf:capability:confirmed-commit:1.0", None, None) => {
+                Ok(Self::ConfirmedCommit)
+            }
+            ("urn", None, "ietf:params:netconf:capability:rollback-on-error:1.0", None, None) => {
+                Ok(Self::RollbackOnError)
+            }
+            ("urn", None, "ietf:params:netconf:capability:validate:1.0", None, None) => {
+                Ok(Self::Validate)
+            }
+            ("urn", None, "ietf:params:netconf:capability:startup:1.0", None, None) => {
+                Ok(Self::Startup)
+            }
+            ("urn", None, "ietf:params:netconf:capability:url:1.0", Some(query), None) => {
+                let schemes = query
+                    .split('&')
+                    .filter_map(|pair| match pair.split_once('=') {
+                        Some(("scheme", values)) => Some(values.split(',')),
+                        _ => None,
+                    })
+                    .flatten()
+                    .map(Box::from)
+                    .collect();
+                Ok(Self::Url(schemes))
+            }
+            _ => Ok(Self::Unknown(uri.into())),
+        }
+    }
 }
 
 impl Capability {
-    #[tracing::instrument(level = "debug")]
-    pub fn from_uri(uri: &str) -> Result<Self, Error> {
-        match uri {
-            uri::BASE_V1_0 => Ok(Self::Base(Base::V1_0)),
-            uri::BASE_V1_1 => Ok(Self::Base(Base::V1_1)),
-            uri::WRITABLE_RUNNING_V1_0 => Ok(Self::WritableRunning),
-            uri::CANDIDATE_V1_0 => Ok(Self::Candidate),
-            uri::CONFIRMED_COMMIT_V1_0 => Ok(Self::ConfirmedCommit),
-            uri::ROLLBACK_ON_ERROR_V1_0 => Ok(Self::RollbackOnError),
-            uri::VALIDATE_V1_0 => Ok(Self::Validate),
-            uri::STARTUP_V1_0 => Ok(Self::Startup),
-            _ => Ok(Self::Unknown(uri.to_string())),
-        }
-    }
-
     #[must_use]
-    pub fn uri(&self) -> &str {
+    pub fn uri(&self) -> Cow<'_, str> {
         match self {
-            Self::Base(base) => base.uri(),
-            Self::WritableRunning => uri::WRITABLE_RUNNING_V1_0,
-            Self::Candidate => uri::CANDIDATE_V1_0,
-            Self::ConfirmedCommit => uri::CONFIRMED_COMMIT_V1_0,
-            Self::RollbackOnError => uri::ROLLBACK_ON_ERROR_V1_0,
-            Self::Validate => uri::VALIDATE_V1_0,
-            Self::Startup => uri::STARTUP_V1_0,
-            Self::Unknown(uri) => uri.as_str(),
+            Self::Base(base) => Cow::Borrowed(base.uri()),
+            Self::WritableRunning => Cow::Borrowed(uri::WRITABLE_RUNNING_V1_0),
+            Self::Candidate => Cow::Borrowed(uri::CANDIDATE_V1_0),
+            Self::ConfirmedCommit => Cow::Borrowed(uri::CONFIRMED_COMMIT_V1_0),
+            Self::RollbackOnError => Cow::Borrowed(uri::ROLLBACK_ON_ERROR_V1_0),
+            Self::Validate => Cow::Borrowed(uri::VALIDATE_V1_0),
+            Self::Startup => Cow::Borrowed(uri::STARTUP_V1_0),
+            // TODO
+            Self::Url(schemes) => {
+                Cow::Owned(format!("{}?scheme={}", uri::URL_V1_0, schemes.join(",")))
+            }
+            Self::Unknown(uri) => Cow::Borrowed(uri.as_str()),
         }
     }
 }
@@ -164,7 +207,7 @@ impl WriteXml for Capability {
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
         _ = Writer::new(writer)
             .create_element("capability")
-            .write_text_content(BytesText::new(self.uri()))?;
+            .write_text_content(BytesText::new(&self.uri()))?;
         Ok(())
     }
 }

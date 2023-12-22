@@ -4,7 +4,7 @@ use quick_xml::Writer;
 
 use crate::{message::rpc::Empty, session::Context, Error};
 
-use super::{Datastore, Operation, WriteXml};
+use super::{Datastore, Operation, Url, WriteXml};
 
 #[derive(Debug, Clone)]
 pub struct DeleteConfig {
@@ -49,6 +49,13 @@ impl Builder<'_> {
             self
         })
     }
+
+    pub fn url<S: AsRef<str>>(mut self, url: S) -> Result<Self, Error> {
+        Url::try_new(url, self.ctx).map(|url| {
+            self.target = Some(Target::Url(url));
+            self
+        })
+    }
 }
 
 impl<'a> super::Builder<'a, DeleteConfig> for Builder<'a> {
@@ -67,6 +74,7 @@ impl<'a> super::Builder<'a, DeleteConfig> for Builder<'a> {
 #[derive(Debug, Clone)]
 enum Target {
     Datastore(Datastore),
+    Url(Url),
 }
 
 impl WriteXml for Target {
@@ -75,6 +83,7 @@ impl WriteXml for Target {
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
         match self {
             Self::Datastore(datastore) => datastore.write_xml(writer),
+            Self::Url(url) => url.write_xml(writer),
         }
     }
 }

@@ -130,6 +130,10 @@ impl ClientMsg for ClientHello {}
 
 #[cfg(test)]
 mod tests {
+    use iri_string::types::UriStr;
+
+    use crate::capabilities::Base;
+
     use super::*;
 
     #[test]
@@ -156,32 +160,24 @@ mod tests {
         "#;
         let expect = ServerHello {
             capabilities: [
-                Capability::from_uri("urn:ietf:params:netconf:base:1.0").unwrap(),
-                Capability::from_uri("urn:ietf:params:netconf:capability:candidate:1.0").unwrap(),
-                Capability::from_uri("urn:ietf:params:netconf:capability:confirmed-commit:1.0")
-                    .unwrap(),
-                Capability::from_uri("urn:ietf:params:netconf:capability:validate:1.0").unwrap(),
-                Capability::from_uri(
-                    "urn:ietf:params:netconf:capability:url:1.0?scheme=http,ftp,file",
-                )
-                .unwrap(),
-                Capability::from_uri("urn:ietf:params:xml:ns:netconf:base:1.0").unwrap(),
-                Capability::from_uri("urn:ietf:params:xml:ns:netconf:capability:candidate:1.0")
-                    .unwrap(),
-                Capability::from_uri(
-                    "urn:ietf:params:xml:ns:netconf:capability:confirmed-commit:1.0",
-                )
-                .unwrap(),
-                Capability::from_uri("urn:ietf:params:xml:ns:netconf:capability:validate:1.0")
-                    .unwrap(),
-                Capability::from_uri(
-                    "urn:ietf:params:xml:ns:netconf:capability:url:1.0?scheme=http,ftp,file",
-                )
-                .unwrap(),
-                Capability::from_uri("urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring")
-                    .unwrap(),
-                Capability::from_uri("http://xml.juniper.net/netconf/junos/1.0").unwrap(),
-                Capability::from_uri("http://xml.juniper.net/dmi/system/1.0").unwrap(),
+                Capability::Base(Base::V1_0),
+                Capability::Candidate,
+                Capability::ConfirmedCommit,
+                Capability::Validate,
+                Capability::Url(vec!["http".into(), "ftp".into(), "file".into()]),
+                Capability::ConfirmedCommit,
+                Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:base:1.0").unwrap().into()),
+                Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:capability:candidate:1.0").unwrap().into()),
+                Capability::Unknown(
+                    UriStr::new("urn:ietf:params:xml:ns:netconf:capability:confirmed-commit:1.0").unwrap().into(),
+                ),
+                Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:capability:validate:1.0").unwrap().into()),
+                Capability::Unknown(
+                    UriStr::new("urn:ietf:params:xml:ns:netconf:capability:url:1.0?scheme=http,ftp,file").unwrap().into(),
+                ),
+                Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring").unwrap().into()),
+                Capability::Unknown(UriStr::new("http://xml.juniper.net/netconf/junos/1.0").unwrap().into()),
+                Capability::Unknown(UriStr::new("http://xml.juniper.net/dmi/system/1.0").unwrap().into()),
             ]
             .into_iter()
             .collect(),
@@ -219,34 +215,27 @@ mod tests {
         let expect = ServerHello {
             capabilities: 
                 [
-                    Capability::from_uri("urn:ietf:params:netconf:base:1.0").unwrap(),
-                    Capability::from_uri("urn:ietf:params:netconf:capability:candidate:1.0").unwrap(),
-                    Capability::from_uri(
-                        "urn:ietf:params:netconf:capability:confirmed-commit:1.0",
-                    ).unwrap(),
-                    Capability::from_uri("urn:ietf:params:netconf:capability:validate:1.0").unwrap(),
-                    Capability::from_uri(
-                        "urn:ietf:params:netconf:capability:url:1.0?scheme=http,ftp,file",
-                    ).unwrap(),
-                    Capability::from_uri("urn:ietf:params:xml:ns:netconf:base:1.0?module=ietf-netconf&amp;revision=2011-06-01").unwrap(),
-                    Capability::from_uri(
-                        "urn:ietf:params:xml:ns:netconf:capability:candidate:1.0",
-                    ).unwrap(),
-                    Capability::from_uri(
-                        "urn:ietf:params:xml:ns:netconf:capability:confirmed-commit:1.0",
-                    ).unwrap(),
-                    Capability::from_uri(
-                        "urn:ietf:params:xml:ns:netconf:capability:validate:1.0",
-                    ).unwrap(),
-                    Capability::from_uri(
-                        "urn:ietf:params:xml:ns:netconf:capability:url:1.0?scheme=http,ftp,file",
-                    ).unwrap(),
-                    Capability::from_uri("urn:ietf:params:xml:ns:yang:ietf-inet-types?module=ietf-inet-types&amp;revision=2013-07-15").unwrap(),
-                    Capability::from_uri("urn:ietf:params:xml:ns:yang:ietf-yang-metadata?module=ietf-yang-metadata&amp;revision=2016-08-05").unwrap(),
-                    Capability::from_uri("urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring").unwrap(),
-                    Capability::from_uri("http://xml.juniper.net/netconf/junos/1.0").unwrap(),
-                    Capability::from_uri("http://xml.juniper.net/dmi/system/1.0").unwrap(),
-                    Capability::from_uri("http://yang.juniper.net/junos/jcmd?module=junos-configuration-metadata&amp;revision=2021-09-01").unwrap()
+                    Capability::Base(Base::V1_0),
+                    Capability::Candidate,
+                    Capability::ConfirmedCommit,
+                    Capability::Validate,
+                    Capability::Url(vec!["http".into(), "ftp".into(), "file".into()]),
+                    Capability::ConfirmedCommit,
+                    Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:base:1.0?module=ietf-netconf&amp;revision=2011-06-01").unwrap().into()),
+                    Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:capability:candidate:1.0").unwrap().into()),
+                    Capability::Unknown(
+                        UriStr::new("urn:ietf:params:xml:ns:netconf:capability:confirmed-commit:1.0").unwrap().into(),
+                    ),
+                    Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:capability:validate:1.0").unwrap().into()),
+                    Capability::Unknown(
+                        UriStr::new("urn:ietf:params:xml:ns:netconf:capability:url:1.0?scheme=http,ftp,file").unwrap().into(),
+                    ),
+                    Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:yang:ietf-inet-types?module=ietf-inet-types&amp;revision=2013-07-15").unwrap().into()),
+                    Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:yang:ietf-yang-metadata?module=ietf-yang-metadata&amp;revision=2016-08-05").unwrap().into()),
+                    Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring").unwrap().into()),
+                    Capability::Unknown(UriStr::new("http://xml.juniper.net/netconf/junos/1.0").unwrap().into()),
+                    Capability::Unknown(UriStr::new("http://xml.juniper.net/dmi/system/1.0").unwrap().into()),
+                    Capability::Unknown(UriStr::new("http://yang.juniper.net/junos/jcmd?module=junos-configuration-metadata&amp;revision=2021-09-01").unwrap().into()),
                 ]
                 .into_iter().collect(),
             session_id: SessionId::new(43129).unwrap(),
@@ -258,7 +247,7 @@ mod tests {
     fn client_hello_to_xml() {
         let req = ClientHello {
             capabilities: 
-                std::iter::once(Capability::from_uri("urn:ietf:params:netconf:base:1.0").unwrap()).collect(),
+                std::iter::once(Capability::Base(Base::V1_0)).collect(),
         };
         let expect = "<hello><capabilities><capability>urn:ietf:params:netconf:base:1.0</capability></capabilities></hello>]]>]]>";
         assert_eq!(req.to_xml().unwrap(), expect);
