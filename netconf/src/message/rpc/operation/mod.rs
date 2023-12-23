@@ -199,6 +199,29 @@ impl WriteXml for Source {
 #[derive(Debug, Clone)]
 pub enum Filter {
     Subtree(String),
+    XPath(String),
+}
+
+impl Filter {
+    const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Subtree(_) => "subtree",
+            Self::XPath(_) => "xpath",
+        }
+    }
+
+    fn try_use(self, ctx: &Context) -> Result<Self, Error> {
+        let required_capability = match self {
+            Self::Subtree(_) => None,
+            Self::XPath(_) => Some(Capability::XPath),
+        };
+        if let Some(capability) = required_capability {
+            if ctx.server_capabilities().contains(&capability) {
+                return Err(Error::UnsupportedFilterType(self.as_str(), capability));
+            }
+        };
+        Ok(self)
+    }
 }
 
 impl WriteXml for Filter {
@@ -206,16 +229,19 @@ impl WriteXml for Filter {
 
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
         let mut writer = Writer::new(writer);
-        let elem = writer.create_element("filter");
+        let elem = writer
+            .create_element("filter")
+            .with_attribute(("type", self.as_str()));
         _ = match self {
-            Self::Subtree(filter) => elem
-                .with_attribute(("type", "subtree"))
-                .write_inner_content(|writer| {
-                    writer
-                        .get_mut()
-                        .write_all(filter.as_bytes())
-                        .map_err(|err| Error::RpcRequestSerialization(err.into()))
-                })?,
+            Self::Subtree(filter) => elem.write_inner_content(|writer| {
+                writer
+                    .get_mut()
+                    .write_all(filter.as_bytes())
+                    .map_err(|err| Error::RpcRequestSerialization(err.into()))
+            })?,
+            Self::XPath(select) => elem
+                .with_attribute(("select", select.as_str()))
+                .write_empty()?,
         };
         Ok(())
     }

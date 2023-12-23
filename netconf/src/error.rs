@@ -132,4 +132,7 @@ pub enum Error {
 
     #[error("unsupported scheme in url '{0}' (requires ':url:1.0' capability with corresponding 'scheme' parameter)")]
     UnsupportedUrlScheme(Box<UriStr>),
+
+    #[error("unsupported filter type '{0}' (requires capability '{1:?}')")]
+    UnsupportedFilterType(&'static str, Capability),
 }

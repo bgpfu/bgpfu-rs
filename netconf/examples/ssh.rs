@@ -41,7 +41,7 @@ async fn main() -> anyhow::Result<()> {
                 .source(Datastore::Running)?
                 .filter(Some(Filter::Subtree(
                     "<configuration><system/></configuration>".to_string()
-                )))
+                )))?
                 .finish())
             .await?,
         session.close().await?

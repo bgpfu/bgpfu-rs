@@ -53,9 +53,9 @@ impl Builder<'_> {
         })
     }
 
-    pub fn filter(mut self, filter: Option<Filter>) -> Self {
-        self.filter = filter;
-        self
+    pub fn filter(mut self, filter: Option<Filter>) -> Result<Self, Error> {
+        self.filter = filter.map(|filter| filter.try_use(self.ctx)).transpose()?;
+        Ok(self)
     }
 }
 

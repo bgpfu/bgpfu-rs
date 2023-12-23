@@ -114,6 +114,7 @@ pub enum Capability {
     Validate,
     Startup,
     Url(Vec<Box<str>>),
+    XPath,
     Unknown(Arc<UriStr>),
 }
 
@@ -161,6 +162,9 @@ impl FromStr for Capability {
                     .collect();
                 Ok(Self::Url(schemes))
             }
+            ("urn", None, "ietf:params:netconf:capability:xpath:1.0", None, None) => {
+                Ok(Self::XPath)
+            }
             _ => Ok(Self::Unknown(uri.into())),
         }
     }
@@ -188,6 +192,7 @@ impl Capability {
                 "urn:ietf:params:netconf:capability:url:1.0?scheme={}",
                 schemes.join(",")
             )),
+            Self::XPath => Cow::Borrowed("urn:ietf:params:netconf:capability:xpath:1.0"),
             Self::Unknown(uri) => Cow::Borrowed(uri.as_str()),
         }
     }
