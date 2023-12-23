@@ -12,7 +12,7 @@ use crate::{
 };
 
 use iri_string::types::UriStr;
-use quick_xml::Writer;
+use quick_xml::{events::BytesStart, NsReader, Writer};
 
 pub trait Operation: Debug + WriteXml + Send + Sync + Sized {
     type Builder<'a>: Builder<'a, Self>;
@@ -48,7 +48,11 @@ pub trait ReplyData: Debug + ReadXml + Sized {
 
 pub mod get;
 #[doc(inline)]
-pub use self::get::{Get, GetConfig};
+pub use self::get::Get;
+
+pub mod get_config;
+#[doc(inline)]
+pub use self::get_config::GetConfig;
 
 pub mod edit_config;
 #[doc(inline)]
@@ -193,6 +197,71 @@ impl WriteXml for Source {
 }
 
 #[derive(Debug, Clone)]
+pub enum Filter {
+    Subtree(String),
+}
+
+impl WriteXml for Filter {
+    type Error = Error;
+
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+        let mut writer = Writer::new(writer);
+        let elem = writer.create_element("filter");
+        _ = match self {
+            Self::Subtree(filter) => elem
+                .with_attribute(("type", "subtree"))
+                .write_inner_content(|writer| {
+                    writer
+                        .get_mut()
+                        .write_all(filter.as_bytes())
+                        .map_err(|err| Error::RpcRequestSerialization(err.into()))
+                })?,
+        };
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reply {
+    inner: Box<str>,
+}
+
+impl ReadXml for Reply {
+    type Error = Error;
+
+    #[tracing::instrument(skip(reader))]
+    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, Self::Error> {
+        let end = start.to_end();
+        let inner = reader.read_text(end.name())?.into();
+        Ok(Self { inner })
+    }
+}
+
+impl ReplyData for Reply {
+    type Ok = Self;
+
+    fn from_ok() -> Result<Self::Ok, Error> {
+        Err(Error::EmptyRpcReply)
+    }
+
+    fn into_result(self) -> Result<Self::Ok, Error> {
+        Ok(self)
+    }
+}
+
+impl Display for Reply {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.inner, f)
+    }
+}
+
+impl AsRef<str> for Reply {
+    fn as_ref(&self) -> &str {
+        self.inner.as_ref()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Url {
     inner: Arc<UriStr>,
 }
@@ -233,5 +302,28 @@ impl WriteXml for Url {
                 Ok::<_, Error>(())
             })?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use quick_xml::events::Event;
+
+    #[test]
+    fn reply_from_xml() {
+        let reply = "<configuration><top/></configuration>";
+        let expect = Reply {
+            inner: reply.into(),
+        };
+        let msg = format!("<data>{reply}</data>");
+        let mut reader = NsReader::from_str(msg.as_str());
+        _ = reader.trim_text(true);
+        if let Event::Start(start) = reader.read_event().unwrap() {
+            assert_eq!(Reply::read_xml(&mut reader, &start).unwrap(), expect);
+        } else {
+            panic!("missing <data> tag")
+        }
     }
 }
