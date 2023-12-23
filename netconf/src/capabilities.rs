@@ -103,21 +103,6 @@ impl FromIterator<Capability> for Capabilities {
     }
 }
 
-mod uri {
-    pub(super) const BASE_V1_0: &str = "urn:ietf:params:netconf:base:1.0";
-    pub(super) const BASE_V1_1: &str = "urn:ietf:params:netconf:base:1.1";
-    pub(super) const WRITABLE_RUNNING_V1_0: &str =
-        "urn:ietf:params:netconf:capability:writable-running:1.0";
-    pub(super) const CANDIDATE_V1_0: &str = "urn:ietf:params:netconf:capability:candidate:1.0";
-    pub(super) const CONFIRMED_COMMIT_V1_0: &str =
-        "urn:ietf:params:netconf:capability:confirmed-commit:1.0";
-    pub(super) const ROLLBACK_ON_ERROR_V1_0: &str =
-        "urn:ietf:params:netconf:capability:rollback-on-error:1.0";
-    pub(super) const VALIDATE_V1_0: &str = "urn:ietf:params:netconf:capability:validate:1.0";
-    pub(super) const STARTUP_V1_0: &str = "urn:ietf:params:netconf:capability:startup:1.0";
-    pub(super) const URL_V1_0: &str = "urn:ietf:params:netconf:capability:url:1.0";
-}
-
 #[allow(variant_size_differences)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Capability {
@@ -186,16 +171,23 @@ impl Capability {
     pub fn uri(&self) -> Cow<'_, str> {
         match self {
             Self::Base(base) => Cow::Borrowed(base.uri()),
-            Self::WritableRunning => Cow::Borrowed(uri::WRITABLE_RUNNING_V1_0),
-            Self::Candidate => Cow::Borrowed(uri::CANDIDATE_V1_0),
-            Self::ConfirmedCommit => Cow::Borrowed(uri::CONFIRMED_COMMIT_V1_0),
-            Self::RollbackOnError => Cow::Borrowed(uri::ROLLBACK_ON_ERROR_V1_0),
-            Self::Validate => Cow::Borrowed(uri::VALIDATE_V1_0),
-            Self::Startup => Cow::Borrowed(uri::STARTUP_V1_0),
-            // TODO
-            Self::Url(schemes) => {
-                Cow::Owned(format!("{}?scheme={}", uri::URL_V1_0, schemes.join(",")))
+            Self::WritableRunning => {
+                Cow::Borrowed("urn:ietf:params:netconf:capability:writable-running:1.0")
             }
+            Self::Candidate => Cow::Borrowed("urn:ietf:params:netconf:capability:candidate:1.0"),
+            Self::ConfirmedCommit => {
+                Cow::Borrowed("urn:ietf:params:netconf:capability:confirmed-commit:1.0")
+            }
+            Self::RollbackOnError => {
+                Cow::Borrowed("urn:ietf:params:netconf:capability:rollback-on-error:1.0")
+            }
+            Self::Validate => Cow::Borrowed("urn:ietf:params:netconf:capability:validate:1.0"),
+            Self::Startup => Cow::Borrowed("urn:ietf:params:netconf:capability:startup:1.0"),
+            // TODO
+            Self::Url(schemes) => Cow::Owned(format!(
+                "urn:ietf:params:netconf:capability:url:1.0?scheme={}",
+                schemes.join(",")
+            )),
             Self::Unknown(uri) => Cow::Borrowed(uri.as_str()),
         }
     }
@@ -221,8 +213,8 @@ pub enum Base {
 impl Base {
     const fn uri(&self) -> &str {
         match self {
-            Self::V1_0 => uri::BASE_V1_0,
-            Self::V1_1 => uri::BASE_V1_1,
+            Self::V1_0 => "urn:ietf:params:netconf:base:1.0",
+            Self::V1_1 => "urn:ietf:params:netconf:base:1.1",
         }
     }
 }
