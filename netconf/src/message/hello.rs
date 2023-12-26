@@ -162,10 +162,9 @@ mod tests {
             capabilities: [
                 Capability::Base(Base::V1_0),
                 Capability::Candidate,
-                Capability::ConfirmedCommit,
+                Capability::ConfirmedCommitV1_0,
                 Capability::Validate,
                 Capability::Url(vec!["http".into(), "ftp".into(), "file".into()]),
-                Capability::ConfirmedCommit,
                 Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:base:1.0").unwrap().into()),
                 Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:capability:candidate:1.0").unwrap().into()),
                 Capability::Unknown(
@@ -217,10 +216,9 @@ mod tests {
                 [
                     Capability::Base(Base::V1_0),
                     Capability::Candidate,
-                    Capability::ConfirmedCommit,
+                    Capability::ConfirmedCommitV1_0,
                     Capability::Validate,
                     Capability::Url(vec!["http".into(), "ftp".into(), "file".into()]),
-                    Capability::ConfirmedCommit,
                     Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:base:1.0?module=ietf-netconf&amp;revision=2011-06-01").unwrap().into()),
                     Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:capability:candidate:1.0").unwrap().into()),
                     Capability::Unknown(

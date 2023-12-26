@@ -26,6 +26,7 @@ russh-keys = "^0.38"
 rustls-pki-types = "^1.0"
 tokio-rustls = "^0.25"
 tracing = { version = "^0.1", features = ["log"] }
+uuid = { version = "^1.0", features = ["v4", "fast-rng"] }
 
 
 [dev-dependencies]

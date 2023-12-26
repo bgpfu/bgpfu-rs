@@ -135,4 +135,7 @@ pub enum Error {
 
     #[error("unsupported filter type '{0}' (requires capability '{1:?}')")]
     UnsupportedFilterType(&'static str, Capability),
+
+    #[error("incompatible parameter combination for operation '{0}': {}", .1.join(", "))]
+    IncompatibleOperationParameters(&'static str, Vec<&'static str>),
 }

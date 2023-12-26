@@ -34,6 +34,11 @@ impl Capabilities {
     }
 
     #[tracing::instrument(ret, level = "debug")]
+    pub fn contains_any(&self, elems: &[&Capability]) -> bool {
+        elems.iter().any(|elem| self.contains(elem))
+    }
+
+    #[tracing::instrument(ret, level = "debug")]
     pub(crate) fn highest_common_version(&self, other: &Self) -> Result<Base, Error> {
         self.inner
             .intersection(&other.inner)
@@ -109,7 +114,8 @@ pub enum Capability {
     Base(Base),
     WritableRunning,
     Candidate,
-    ConfirmedCommit,
+    ConfirmedCommitV1_0,
+    ConfirmedCommitV1_1,
     RollbackOnError,
     Validate,
     Startup,
@@ -139,7 +145,10 @@ impl FromStr for Capability {
                 Ok(Self::Candidate)
             }
             ("urn", None, "ietf:params:netconf:capability:confirmed-commit:1.0", None, None) => {
-                Ok(Self::ConfirmedCommit)
+                Ok(Self::ConfirmedCommitV1_0)
+            }
+            ("urn", None, "ietf:params:netconf:capability:confirmed-commit:1.1", None, None) => {
+                Ok(Self::ConfirmedCommitV1_1)
             }
             ("urn", None, "ietf:params:netconf:capability:rollback-on-error:1.0", None, None) => {
                 Ok(Self::RollbackOnError)
@@ -179,8 +188,11 @@ impl Capability {
                 Cow::Borrowed("urn:ietf:params:netconf:capability:writable-running:1.0")
             }
             Self::Candidate => Cow::Borrowed("urn:ietf:params:netconf:capability:candidate:1.0"),
-            Self::ConfirmedCommit => {
+            Self::ConfirmedCommitV1_0 => {
                 Cow::Borrowed("urn:ietf:params:netconf:capability:confirmed-commit:1.0")
+            }
+            Self::ConfirmedCommitV1_1 => {
+                Cow::Borrowed("urn:ietf:params:netconf:capability:confirmed-commit:1.1")
             }
             Self::RollbackOnError => {
                 Cow::Borrowed("urn:ietf:params:netconf:capability:rollback-on-error:1.0")

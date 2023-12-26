@@ -4,15 +4,16 @@ use std::{
     sync::Arc,
 };
 
+use iri_string::types::UriStr;
+use quick_xml::{events::BytesStart, NsReader, Writer};
+use uuid::Uuid;
+
 use crate::{
     capabilities::Capability,
     message::{ReadXml, WriteXml},
     session::Context,
     Error,
 };
-
-use iri_string::types::UriStr;
-use quick_xml::{events::BytesStart, NsReader, Writer};
 
 pub trait Operation: Debug + WriteXml + Send + Sync + Sized {
     type Builder<'a>: Builder<'a, Self>;
@@ -77,6 +78,10 @@ pub use self::kill_session::KillSession;
 pub mod commit;
 #[doc(inline)]
 pub use self::commit::Commit;
+
+pub mod cancel_commit;
+#[doc(inline)]
+pub use self::cancel_commit::CancelCommit;
 
 pub mod discard_changes;
 #[doc(inline)]
@@ -328,6 +333,34 @@ impl WriteXml for Url {
                 Ok::<_, Error>(())
             })?;
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Token {
+    inner: Arc<str>,
+}
+
+impl Token {
+    pub fn new<S: AsRef<str>>(token: S) -> Self {
+        let inner = token.as_ref().into();
+        Self { inner }
+    }
+
+    #[must_use]
+    pub fn generate() -> Self {
+        let inner = Arc::from(
+            &*Uuid::new_v4()
+                .urn()
+                .encode_lower(&mut Uuid::encode_buffer()),
+        );
+        Self { inner }
+    }
+}
+
+impl Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.inner, f)
     }
 }
 
