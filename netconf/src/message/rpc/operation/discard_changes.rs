@@ -41,7 +41,7 @@ impl<'a> super::Builder<'a, DiscardChanges> for Builder<'a> {
 
     fn finish(self) -> Result<DiscardChanges, Error> {
         self.ctx
-            .try_operation(Capability::Candidate, "<discard-changes/>", || {
+            .try_operation(&[&Capability::Candidate], "<discard-changes/>", || {
                 Ok(DiscardChanges { _inner: () })
             })
     }

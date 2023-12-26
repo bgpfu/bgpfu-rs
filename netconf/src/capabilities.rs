@@ -117,7 +117,8 @@ pub enum Capability {
     ConfirmedCommitV1_0,
     ConfirmedCommitV1_1,
     RollbackOnError,
-    Validate,
+    ValidateV1_0,
+    ValidateV1_1,
     Startup,
     Url(Vec<Box<str>>),
     XPath,
@@ -154,7 +155,10 @@ impl FromStr for Capability {
                 Ok(Self::RollbackOnError)
             }
             ("urn", None, "ietf:params:netconf:capability:validate:1.0", None, None) => {
-                Ok(Self::Validate)
+                Ok(Self::ValidateV1_0)
+            }
+            ("urn", None, "ietf:params:netconf:capability:validate:1.1", None, None) => {
+                Ok(Self::ValidateV1_1)
             }
             ("urn", None, "ietf:params:netconf:capability:startup:1.0", None, None) => {
                 Ok(Self::Startup)
@@ -197,7 +201,8 @@ impl Capability {
             Self::RollbackOnError => {
                 Cow::Borrowed("urn:ietf:params:netconf:capability:rollback-on-error:1.0")
             }
-            Self::Validate => Cow::Borrowed("urn:ietf:params:netconf:capability:validate:1.0"),
+            Self::ValidateV1_0 => Cow::Borrowed("urn:ietf:params:netconf:capability:validate:1.0"),
+            Self::ValidateV1_1 => Cow::Borrowed("urn:ietf:params:netconf:capability:validate:1.1"),
             Self::Startup => Cow::Borrowed("urn:ietf:params:netconf:capability:startup:1.0"),
             // TODO
             Self::Url(schemes) => Cow::Owned(format!(

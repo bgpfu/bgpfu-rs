@@ -156,7 +156,7 @@ impl<'a> super::Builder<'a, Commit> for Builder<'a> {
 
     fn finish(self) -> Result<Commit, Error> {
         self.ctx
-            .try_operation(Capability::Candidate, "<commit/>", || {
+            .try_operation(&[&Capability::Candidate], "<commit/>", || {
                 if self.confirmed && self.persist_id.is_some() {
                     return Err(Error::IncompatibleOperationParameters(
                         "commit",

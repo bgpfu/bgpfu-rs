@@ -2,7 +2,7 @@ use std::io::Write;
 
 use quick_xml::Writer;
 
-use crate::{message::rpc::Empty, session::Context, Error};
+use crate::{capabilities::Capability, message::rpc::Empty, session::Context, Error};
 
 use super::{Datastore, Operation, Source, WriteXml};
 
@@ -59,10 +59,16 @@ impl<'a> super::Builder<'a, Validate> for Builder<'a> {
     }
 
     fn finish(self) -> Result<Validate, Error> {
-        let source = self
-            .source
-            .ok_or_else(|| Error::MissingOperationParameter("validate", "source"))?;
-        Ok(Validate { source })
+        self.ctx.try_operation(
+            &[&Capability::ValidateV1_0, &Capability::ValidateV1_1],
+            "<validate>",
+            || {
+                let source = self
+                    .source
+                    .ok_or_else(|| Error::MissingOperationParameter("validate", "source"))?;
+                Ok(Validate { source })
+            },
+        )
     }
 }
 

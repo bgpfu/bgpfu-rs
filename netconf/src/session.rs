@@ -99,7 +99,7 @@ impl Context {
 
     pub(crate) fn try_operation<O, F>(
         &self,
-        required_capability: Capability,
+        required_capabilities: &[&Capability],
         operation_name: &'static str,
         finish: F,
     ) -> Result<O, Error>
@@ -107,9 +107,14 @@ impl Context {
         F: FnOnce() -> Result<O, Error>,
     {
         self.server_capabilities()
-            .contains(&required_capability)
+            .contains_any(required_capabilities)
             .then(finish)
-            .ok_or_else(|| Error::UnsupportedOperation(operation_name, required_capability))?
+            .ok_or_else(|| {
+                Error::UnsupportedOperation(
+                    operation_name,
+                    required_capabilities.iter().copied().cloned().collect(),
+                )
+            })?
     }
 }
 

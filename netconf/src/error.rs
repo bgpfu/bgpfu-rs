@@ -112,14 +112,20 @@ pub enum Error {
     #[error("kill-session operation targeting the current session is not permitted")]
     KillCurrentSession,
 
-    #[error("unsupported rpc operation '{0}' (requires capability '{1:?}')")]
-    UnsupportedOperation(&'static str, Capability),
+    #[error(
+        "unsupported rpc operation '{0}' (requires one of the capabilities '{}')",
+        .1.iter().map(|c| format!("{c:?}")).collect::<Vec<_>>().join(", ")
+    )]
+    UnsupportedOperation(&'static str, Vec<Capability>),
 
     #[error("unsupported parameter '{1}' for rpc operation '{0}' (requires capability '{2:?}')")]
     UnsupportedOperationParameter(&'static str, &'static str, Capability),
 
-    #[error("unsupported value '{2}' of parameter '{1}' for rpc operation '{0}' (requires capability '{3:?}')")]
-    UnsupportedOperParameterValue(&'static str, &'static str, &'static str, Capability),
+    #[error(
+        "unsupported value '{2}' of parameter '{1}' for rpc operation '{0}' (requires one of the capabilities '{}')",
+        .3.iter().map(|c| format!("{c:?}")).collect::<Vec<_>>().join(", ")
+    )]
+    UnsupportedOperParameterValue(&'static str, &'static str, &'static str, Vec<Capability>),
 
     #[error("unsupported source datastore '{0:?}' (requires capability '{1:?}')")]
     UnsupportedSource(Datastore, Capability),

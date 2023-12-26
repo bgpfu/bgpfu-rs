@@ -72,12 +72,15 @@ impl<'a> super::Builder<'a, CancelCommit> for Builder<'a> {
     }
 
     fn finish(self) -> Result<CancelCommit, Error> {
-        self.ctx
-            .try_operation(Capability::ConfirmedCommitV1_1, "<cancel-commit/>", || {
+        self.ctx.try_operation(
+            &[&Capability::ConfirmedCommitV1_1],
+            "<cancel-commit/>",
+            || {
                 Ok(CancelCommit {
                     persist_id: self.persist_id,
                 })
-            })
+            },
+        )
     }
 }
 

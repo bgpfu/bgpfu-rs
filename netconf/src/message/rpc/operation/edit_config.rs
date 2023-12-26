@@ -193,8 +193,7 @@ pub enum TestOption {
     #[default]
     TestThenSet,
     Set,
-    // TODO: requires :validate:1.1 capability
-    // TestOnly,
+    TestOnly,
 }
 
 impl TestOption {
@@ -206,28 +205,31 @@ impl TestOption {
         match self {
             Self::TestThenSet => "test-then-set",
             Self::Set => "set",
+            Self::TestOnly => "test-only",
         }
     }
 
     fn try_use(self, ctx: &Context) -> Result<Self, Error> {
-        let required_capability = match self {
-            Self::TestThenSet | Self::Set => Some(Capability::Validate),
+        let required_capabilities = match self {
+            Self::TestThenSet | Self::Set => {
+                &[&Capability::ValidateV1_0, &Capability::ValidateV1_1][..]
+            }
+            Self::TestOnly => &[&Capability::ValidateV1_1][..],
         };
-        required_capability.map_or_else(
-            || Ok(self),
-            |capability| {
-                if ctx.server_capabilities().contains(&capability) {
-                    Ok(self)
-                } else {
-                    Err(Error::UnsupportedOperParameterValue(
-                        "<edit-config>",
-                        "<test-option>",
-                        self.as_str(),
-                        capability,
-                    ))
-                }
-            },
-        )
+        if required_capabilities.is_empty()
+            || ctx
+                .server_capabilities()
+                .contains_any(required_capabilities)
+        {
+            Ok(self)
+        } else {
+            Err(Error::UnsupportedOperParameterValue(
+                "<edit-config>",
+                "<test-option>",
+                self.as_str(),
+                required_capabilities.iter().copied().cloned().collect(),
+            ))
+        }
     }
 }
 
@@ -253,25 +255,24 @@ impl ErrorOption {
     }
 
     fn try_use(self, ctx: &Context) -> Result<Self, Error> {
-        let required_capability = match self {
-            Self::StopOnError | Self::ContinueOnError => None,
-            Self::RollbackOnError => Some(Capability::RollbackOnError),
+        let required_capabilities = match self {
+            Self::StopOnError | Self::ContinueOnError => &[][..],
+            Self::RollbackOnError => &[&Capability::RollbackOnError][..],
         };
-        required_capability.map_or_else(
-            || Ok(self),
-            |capability| {
-                if ctx.server_capabilities().contains(&capability) {
-                    Ok(self)
-                } else {
-                    Err(Error::UnsupportedOperParameterValue(
-                        "<edit-config>",
-                        "<error-option>",
-                        self.as_str(),
-                        capability,
-                    ))
-                }
-            },
-        )
+        if required_capabilities.is_empty()
+            || ctx
+                .server_capabilities()
+                .contains_any(required_capabilities)
+        {
+            Ok(self)
+        } else {
+            Err(Error::UnsupportedOperParameterValue(
+                "<edit-config>",
+                "<error-option>",
+                self.as_str(),
+                required_capabilities.iter().copied().cloned().collect(),
+            ))
+        }
     }
 }
 
