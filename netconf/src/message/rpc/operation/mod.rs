@@ -9,13 +9,16 @@ use quick_xml::{events::BytesStart, NsReader, Writer};
 use uuid::Uuid;
 
 use crate::{
-    capabilities::Capability,
+    capabilities::{Capability, Requirements},
     message::{ReadXml, WriteXml},
     session::Context,
     Error,
 };
 
 pub trait Operation: Debug + WriteXml + Send + Sync + Sized {
+    const NAME: &'static str;
+    const REQUIRED_CAPABILITIES: Requirements;
+
     type Builder<'a>: Builder<'a, Self>;
     type ReplyData: ReplyData;
 
@@ -23,7 +26,10 @@ pub trait Operation: Debug + WriteXml + Send + Sync + Sized {
     where
         F: Fn(Self::Builder<'a>) -> Result<Self, Error>,
     {
-        Self::Builder::new(ctx).build(build_fn)
+        Self::REQUIRED_CAPABILITIES
+            .check(ctx.server_capabilities())
+            .then(|| Self::Builder::new(ctx).build(build_fn))
+            .ok_or_else(|| Error::UnsupportedOperation(Self::NAME, Self::REQUIRED_CAPABILITIES))?
     }
 }
 
@@ -46,6 +52,8 @@ pub trait ReplyData: Debug + ReadXml + Sized {
     fn from_ok() -> Result<Self::Ok, Error>;
     fn into_result(self) -> Result<Self::Ok, Error>;
 }
+
+mod params;
 
 pub mod get;
 #[doc(inline)]
@@ -104,57 +112,42 @@ pub enum Datastore {
 
 impl Datastore {
     fn try_as_source(self, ctx: &Context) -> Result<Self, Error> {
-        let required_capability = match self {
-            Self::Running => None,
-            Self::Candidate => Some(Capability::Candidate),
-            Self::Startup => Some(Capability::Startup),
+        let required_capabilities = match self {
+            Self::Running => Requirements::None,
+            Self::Candidate => Requirements::One(Capability::Candidate),
+            Self::Startup => Requirements::One(Capability::Startup),
         };
-        required_capability.map_or_else(
-            || Ok(self),
-            |capability| {
-                if ctx.server_capabilities().contains(&capability) {
-                    Ok(self)
-                } else {
-                    Err(Error::UnsupportedSource(self, capability))
-                }
-            },
-        )
+        if required_capabilities.check(ctx.server_capabilities()) {
+            Ok(self)
+        } else {
+            Err(Error::UnsupportedSource(self, required_capabilities))
+        }
     }
 
     fn try_as_target(self, ctx: &Context) -> Result<Self, Error> {
-        let required_capability = match self {
-            Self::Running => Some(Capability::WritableRunning),
-            Self::Candidate => Some(Capability::Candidate),
-            Self::Startup => Some(Capability::Startup),
+        let required_capabilities = match self {
+            Self::Running => Requirements::One(Capability::WritableRunning),
+            Self::Candidate => Requirements::One(Capability::Candidate),
+            Self::Startup => Requirements::One(Capability::Startup),
         };
-        required_capability.map_or_else(
-            || Ok(self),
-            |capability| {
-                if ctx.server_capabilities().contains(&capability) {
-                    Ok(self)
-                } else {
-                    Err(Error::UnsupportedTarget(self, capability))
-                }
-            },
-        )
+        if required_capabilities.check(ctx.server_capabilities()) {
+            Ok(self)
+        } else {
+            Err(Error::UnsupportedTarget(self, required_capabilities))
+        }
     }
 
     fn try_as_lock_target(self, ctx: &Context) -> Result<Self, Error> {
-        let required_capability = match self {
-            Self::Running => None,
-            Self::Candidate => Some(Capability::Candidate),
-            Self::Startup => Some(Capability::Startup),
+        let required_capabilities = match self {
+            Self::Running => Requirements::None,
+            Self::Candidate => Requirements::One(Capability::Candidate),
+            Self::Startup => Requirements::One(Capability::Startup),
         };
-        required_capability.map_or_else(
-            || Ok(self),
-            |capability| {
-                if ctx.server_capabilities().contains(&capability) {
-                    Ok(self)
-                } else {
-                    Err(Error::UnsupportedLockTarget(self, capability))
-                }
-            },
-        )
+        if required_capabilities.check(ctx.server_capabilities()) {
+            Ok(self)
+        } else {
+            Err(Error::UnsupportedLockTarget(self, required_capabilities))
+        }
     }
 }
 
@@ -216,16 +209,18 @@ impl Filter {
     }
 
     fn try_use(self, ctx: &Context) -> Result<Self, Error> {
-        let required_capability = match self {
-            Self::Subtree(_) => None,
-            Self::XPath(_) => Some(Capability::XPath),
+        let required_capabilities = match self {
+            Self::Subtree(_) => Requirements::None,
+            Self::XPath(_) => Requirements::One(Capability::XPath),
         };
-        if let Some(capability) = required_capability {
-            if ctx.server_capabilities().contains(&capability) {
-                return Err(Error::UnsupportedFilterType(self.as_str(), capability));
-            }
-        };
-        Ok(self)
+        if required_capabilities.check(ctx.server_capabilities()) {
+            Ok(self)
+        } else {
+            Err(Error::UnsupportedFilterType(
+                self.as_str(),
+                required_capabilities,
+            ))
+        }
     }
 }
 

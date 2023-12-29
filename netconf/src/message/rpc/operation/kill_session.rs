@@ -3,12 +3,13 @@ use std::io::Write;
 use quick_xml::Writer;
 
 use crate::{
+    capabilities::Requirements,
     message::rpc::Empty,
     session::{Context, SessionId},
     Error,
 };
 
-use super::{Operation, WriteXml};
+use super::{params::Required, Operation, WriteXml};
 
 #[derive(Debug, Clone, Copy)]
 pub struct KillSession {
@@ -16,6 +17,9 @@ pub struct KillSession {
 }
 
 impl Operation for KillSession {
+    const NAME: &'static str = "kill-session";
+    const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
+
     type Builder<'a> = Builder<'a>;
     type ReplyData = Empty;
 }
@@ -25,7 +29,7 @@ impl WriteXml for KillSession {
 
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
         _ = Writer::new(writer)
-            .create_element("kill-session")
+            .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 _ = writer
                     .create_element("session-id")
@@ -43,7 +47,7 @@ impl WriteXml for KillSession {
 #[must_use]
 pub struct Builder<'a> {
     ctx: &'a Context,
-    session_id: Option<SessionId>,
+    session_id: Required<SessionId>,
 }
 
 impl Builder<'_> {
@@ -54,7 +58,7 @@ impl Builder<'_> {
                 if session_id == self.ctx.session_id() {
                     Err(Error::KillCurrentSession)
                 } else {
-                    self.session_id = Some(session_id);
+                    self.session_id.set(session_id);
                     Ok(self)
                 }
             })
@@ -65,15 +69,14 @@ impl<'a> super::Builder<'a, KillSession> for Builder<'a> {
     fn new(ctx: &'a Context) -> Self {
         Self {
             ctx,
-            session_id: None,
+            session_id: Required::init(),
         }
     }
 
     fn finish(self) -> Result<KillSession, Error> {
-        let session_id = self
-            .session_id
-            .ok_or_else(|| Error::MissingOperationParameter("kill-session", "session-id"))?;
-        Ok(KillSession { session_id })
+        Ok(KillSession {
+            session_id: self.session_id.require::<KillSession>("session-id")?,
+        })
     }
 }
 

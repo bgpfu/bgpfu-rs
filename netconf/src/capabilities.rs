@@ -1,6 +1,7 @@
 use std::{
     borrow::Cow,
     collections::{BTreeSet, HashSet},
+    fmt::Display,
     io::Write,
     str::FromStr,
     sync::Arc,
@@ -29,15 +30,15 @@ impl Capabilities {
     }
 
     #[tracing::instrument(ret, level = "debug")]
-    pub fn contains(&self, elem: &Capability) -> bool {
+    fn contains(&self, elem: &Capability) -> bool {
         self.inner.contains(elem)
     }
 
-    #[tracing::instrument(ret, level = "debug")]
-    pub fn contains_any(&self, elems: &[&Capability]) -> bool {
-        elems.iter().any(|elem| self.contains(elem))
-    }
-
+    // #[tracing::instrument(ret, level = "debug")]
+    // pub fn contains_any(&self, elems: &[&Capability]) -> bool {
+    //     elems.iter().any(|elem| self.contains(elem))
+    // }
+    //
     #[tracing::instrument(ret, level = "debug")]
     pub(crate) fn highest_common_version(&self, other: &Self) -> Result<Base, Error> {
         self.inner
@@ -123,6 +124,8 @@ pub enum Capability {
     Url(Vec<Box<str>>),
     XPath,
     Unknown(Arc<UriStr>),
+    #[cfg(feature = "junos")]
+    JunosXmlManagementProtocol,
 }
 
 impl FromStr for Capability {
@@ -178,6 +181,10 @@ impl FromStr for Capability {
             ("urn", None, "ietf:params:netconf:capability:xpath:1.0", None, None) => {
                 Ok(Self::XPath)
             }
+            #[cfg(feature = "junos")]
+            ("http", Some("xml.juniper.net"), "/netconf/junos/1.0", None, None) => {
+                Ok(Self::JunosXmlManagementProtocol)
+            }
             _ => Ok(Self::Unknown(uri.into())),
         }
     }
@@ -204,13 +211,16 @@ impl Capability {
             Self::ValidateV1_0 => Cow::Borrowed("urn:ietf:params:netconf:capability:validate:1.0"),
             Self::ValidateV1_1 => Cow::Borrowed("urn:ietf:params:netconf:capability:validate:1.1"),
             Self::Startup => Cow::Borrowed("urn:ietf:params:netconf:capability:startup:1.0"),
-            // TODO
             Self::Url(schemes) => Cow::Owned(format!(
                 "urn:ietf:params:netconf:capability:url:1.0?scheme={}",
                 schemes.join(",")
             )),
             Self::XPath => Cow::Borrowed("urn:ietf:params:netconf:capability:xpath:1.0"),
             Self::Unknown(uri) => Cow::Borrowed(uri.as_str()),
+            #[cfg(feature = "junos")]
+            Self::JunosXmlManagementProtocol => {
+                Cow::Borrowed("http://xml.juniper.net/netconf/junos/1.0")
+            }
         }
     }
 }
@@ -226,6 +236,24 @@ impl WriteXml for Capability {
     }
 }
 
+impl Display for Capability {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Base(base) => base.fmt(f),
+            Self::WritableRunning => f.write_str(":writable-running:1.0"),
+            Self::Candidate => f.write_str(":candidate:1.0"),
+            Self::ConfirmedCommitV1_0 => f.write_str(":confirmed-commit:1.0"),
+            Self::ConfirmedCommitV1_1 => f.write_str(":confirmed-commit:1.1"),
+            Self::RollbackOnError => f.write_str(":rollback-on-error:1.0"),
+            Self::ValidateV1_0 => f.write_str(":validate:1.0"),
+            Self::ValidateV1_1 => f.write_str(":validate:1.1"),
+            Self::Url(schemes) => write!(f, ":url:1.0?scheme={}", schemes.join(",")),
+            Self::XPath => f.write_str(":xpath:1.0"),
+            _ => f.write_str(&self.uri()),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Base {
     V1_0,
@@ -237,6 +265,65 @@ impl Base {
         match self {
             Self::V1_0 => "urn:ietf:params:netconf:base:1.0",
             Self::V1_1 => "urn:ietf:params:netconf:base:1.1",
+        }
+    }
+}
+
+impl Display for Base {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::V1_0 => f.write_str(":base:1.0"),
+            Self::V1_1 => f.write_str(":base:1.1"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Requirements {
+    None,
+    One(Capability),
+    Any(&'static [Capability]),
+    All(&'static [Capability]),
+}
+
+impl Requirements {
+    pub(crate) fn check(&self, capabilities: &Capabilities) -> bool {
+        match self {
+            Self::None => true,
+            Self::One(requirement) => capabilities.contains(requirement),
+            Self::Any(requirements) => requirements
+                .iter()
+                .any(|requirement| capabilities.contains(requirement)),
+            Self::All(requirements) => requirements
+                .iter()
+                .all(|requirement| capabilities.contains(requirement)),
+        }
+    }
+}
+
+impl Display for Requirements {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::None | Self::Any(&[]) | Self::All(&[]) => f.write_str("none"),
+            Self::One(ref capability)
+            | Self::Any(&[ref capability])
+            | Self::All(&[ref capability]) => {
+                write!(f, "exactly '{capability}'")
+            }
+            Self::Any(requirements) => {
+                let mut iter = requirements.iter();
+                if let Some(first) = iter.next() {
+                    write!(f, "any of '{first}'")?;
+                };
+                iter.try_for_each(|requirement| write!(f, ", '{requirement}'"))
+            }
+            Self::All(requirements) => {
+                let mut iter = requirements.iter();
+                if let Some(first) = iter.next() {
+                    write!(f, "all of '{first}'")?;
+                };
+                iter.try_for_each(|requirement| write!(f, ", '{requirement}'"))
+            }
         }
     }
 }

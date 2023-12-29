@@ -2,9 +2,14 @@ use std::io::Write;
 
 use quick_xml::Writer;
 
-use crate::{capabilities::Capability, message::rpc::Empty, session::Context, Error};
+use crate::{
+    capabilities::{Capability, Requirements},
+    message::rpc::Empty,
+    session::Context,
+    Error,
+};
 
-use super::{Datastore, Operation, Url, WriteXml};
+use super::{params::Required, Datastore, Operation, Url, WriteXml};
 
 #[derive(Debug, Clone)]
 pub struct EditConfig {
@@ -16,6 +21,8 @@ pub struct EditConfig {
 }
 
 impl Operation for EditConfig {
+    const NAME: &'static str = "edit-config";
+    const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
     type Builder<'a> = Builder<'a>;
     type ReplyData = Empty;
 }
@@ -25,7 +32,7 @@ impl WriteXml for EditConfig {
 
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
         _ = Writer::new(writer)
-            .create_element("edit-config")
+            .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 _ = writer
                     .create_element("target")
@@ -65,8 +72,8 @@ impl WriteXml for EditConfig {
 #[must_use]
 pub struct Builder<'a> {
     ctx: &'a Context,
-    target: Option<Datastore>,
-    source: Option<Source>,
+    target: Required<Datastore>,
+    source: Required<Source>,
     default_operation: DefaultOperation,
     error_option: ErrorOption,
     test_option: TestOption,
@@ -75,19 +82,19 @@ pub struct Builder<'a> {
 impl Builder<'_> {
     pub fn target(mut self, target: Datastore) -> Result<Self, Error> {
         target.try_as_target(self.ctx).map(|target| {
-            self.target = Some(target);
+            self.target.set(target);
             self
         })
     }
 
     pub fn config(mut self, config: String) -> Self {
-        self.source = Some(Source::Config(config));
+        self.source.set(Source::Config(config));
         self
     }
 
     pub fn url<S: AsRef<str>>(mut self, url: S) -> Result<Self, Error> {
         Url::try_new(url, self.ctx).map(|url| {
-            self.source = Some(Source::Url(url));
+            self.source.set(Source::Url(url));
             self
         })
     }
@@ -116,8 +123,8 @@ impl<'a> super::Builder<'a, EditConfig> for Builder<'a> {
     fn new(ctx: &'a Context) -> Self {
         Self {
             ctx,
-            target: None,
-            source: None,
+            target: Required::init(),
+            source: Required::init(),
             default_operation: DefaultOperation::default(),
             error_option: ErrorOption::default(),
             test_option: TestOption::default(),
@@ -125,15 +132,9 @@ impl<'a> super::Builder<'a, EditConfig> for Builder<'a> {
     }
 
     fn finish(self) -> Result<EditConfig, Error> {
-        let target = self
-            .target
-            .ok_or_else(|| Error::MissingOperationParameter("edit-config", "target"))?;
-        let source = self
-            .source
-            .ok_or_else(|| Error::MissingOperationParameter("edit-config", "config"))?;
         Ok(EditConfig {
-            target,
-            source,
+            target: self.target.require::<EditConfig>("target")?,
+            source: self.source.require::<EditConfig>("config")?,
             default_operation: self.default_operation,
             error_option: self.error_option,
             test_option: self.test_option,
@@ -212,22 +213,18 @@ impl TestOption {
     fn try_use(self, ctx: &Context) -> Result<Self, Error> {
         let required_capabilities = match self {
             Self::TestThenSet | Self::Set => {
-                &[&Capability::ValidateV1_0, &Capability::ValidateV1_1][..]
+                Requirements::Any(&[Capability::ValidateV1_0, Capability::ValidateV1_1])
             }
-            Self::TestOnly => &[&Capability::ValidateV1_1][..],
+            Self::TestOnly => Requirements::One(Capability::ValidateV1_1),
         };
-        if required_capabilities.is_empty()
-            || ctx
-                .server_capabilities()
-                .contains_any(required_capabilities)
-        {
+        if required_capabilities.check(ctx.server_capabilities()) {
             Ok(self)
         } else {
             Err(Error::UnsupportedOperParameterValue(
-                "<edit-config>",
+                EditConfig::NAME,
                 "<test-option>",
                 self.as_str(),
-                required_capabilities.iter().copied().cloned().collect(),
+                required_capabilities,
             ))
         }
     }
@@ -256,21 +253,17 @@ impl ErrorOption {
 
     fn try_use(self, ctx: &Context) -> Result<Self, Error> {
         let required_capabilities = match self {
-            Self::StopOnError | Self::ContinueOnError => &[][..],
-            Self::RollbackOnError => &[&Capability::RollbackOnError][..],
+            Self::StopOnError | Self::ContinueOnError => Requirements::None,
+            Self::RollbackOnError => Requirements::One(Capability::RollbackOnError),
         };
-        if required_capabilities.is_empty()
-            || ctx
-                .server_capabilities()
-                .contains_any(required_capabilities)
-        {
+        if required_capabilities.check(ctx.server_capabilities()) {
             Ok(self)
         } else {
             Err(Error::UnsupportedOperParameterValue(
-                "<edit-config>",
+                EditConfig::NAME,
                 "<error-option>",
                 self.as_str(),
-                required_capabilities.iter().copied().cloned().collect(),
+                required_capabilities,
             ))
         }
     }

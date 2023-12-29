@@ -275,6 +275,7 @@ mod tests {
     use quick_xml::events::BytesText;
 
     use super::{operation, *};
+    use crate::capabilities::Requirements;
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     struct Foo {
@@ -293,6 +294,8 @@ mod tests {
     }
 
     impl Operation for Foo {
+        const NAME: &'static str = "foo";
+        const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
         type Builder<'a> = FooBuilder;
         type ReplyData = Empty;
     }
@@ -382,6 +385,8 @@ mod tests {
     }
 
     impl Operation for Bar {
+        const NAME: &'static str = "bar";
+        const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
         type Builder<'a> = BarBuilder;
         type ReplyData = BarReply;
     }

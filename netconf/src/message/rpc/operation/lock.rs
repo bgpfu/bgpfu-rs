@@ -2,9 +2,9 @@ use std::io::Write;
 
 use quick_xml::Writer;
 
-use crate::{message::rpc::Empty, session::Context, Error};
+use crate::{capabilities::Requirements, message::rpc::Empty, session::Context, Error};
 
-use super::{Datastore, Operation, WriteXml};
+use super::{params::Required, Datastore, Operation, WriteXml};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Lock {
@@ -12,6 +12,9 @@ pub struct Lock {
 }
 
 impl Operation for Lock {
+    const NAME: &'static str = "lock";
+    const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
+
     type Builder<'a> = Builder<'a>;
     type ReplyData = Empty;
 }
@@ -21,7 +24,7 @@ impl WriteXml for Lock {
 
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
         _ = Writer::new(writer)
-            .create_element("lock")
+            .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 _ = writer
                     .create_element("target")
@@ -38,6 +41,9 @@ pub struct Unlock {
 }
 
 impl Operation for Unlock {
+    const NAME: &'static str = "unlock";
+    const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
+
     type Builder<'a> = Builder<'a>;
     type ReplyData = Empty;
 }
@@ -47,7 +53,7 @@ impl WriteXml for Unlock {
 
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
         _ = Writer::new(writer)
-            .create_element("unlock")
+            .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 _ = writer
                     .create_element("target")
@@ -62,13 +68,20 @@ impl WriteXml for Unlock {
 #[must_use]
 pub struct Builder<'a> {
     ctx: &'a Context,
-    target: Option<Datastore>,
+    target: Required<Datastore>,
 }
 
-impl Builder<'_> {
+impl<'a> Builder<'a> {
+    const fn new(ctx: &'a Context) -> Self {
+        Self {
+            ctx,
+            target: Required::init(),
+        }
+    }
+
     pub fn target(mut self, target: Datastore) -> Result<Self, Error> {
         target.try_as_lock_target(self.ctx).map(|target| {
-            self.target = Some(target);
+            self.target.set(target);
             self
         })
     }
@@ -76,27 +89,25 @@ impl Builder<'_> {
 
 impl<'a> super::Builder<'a, Lock> for Builder<'a> {
     fn new(ctx: &'a Context) -> Self {
-        Self { ctx, target: None }
+        Self::new(ctx)
     }
 
     fn finish(self) -> Result<Lock, Error> {
-        let target = self
-            .target
-            .ok_or_else(|| Error::MissingOperationParameter("lock", "target"))?;
-        Ok(Lock { target })
+        Ok(Lock {
+            target: self.target.require::<Lock>("target")?,
+        })
     }
 }
 
 impl<'a> super::Builder<'a, Unlock> for Builder<'a> {
     fn new(ctx: &'a Context) -> Self {
-        Self { ctx, target: None }
+        Self::new(ctx)
     }
 
     fn finish(self) -> Result<Unlock, Error> {
-        let target = self
-            .target
-            .ok_or_else(|| Error::MissingOperationParameter("unlock", "target"))?;
-        Ok(Unlock { target })
+        Ok(Unlock {
+            target: self.target.require::<Unlock>("target")?,
+        })
     }
 }
 

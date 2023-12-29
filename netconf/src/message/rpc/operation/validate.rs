@@ -2,9 +2,14 @@ use std::io::Write;
 
 use quick_xml::Writer;
 
-use crate::{capabilities::Capability, message::rpc::Empty, session::Context, Error};
+use crate::{
+    capabilities::{Capability, Requirements},
+    message::rpc::Empty,
+    session::Context,
+    Error,
+};
 
-use super::{Datastore, Operation, Source, WriteXml};
+use super::{params::Required, Datastore, Operation, Source, WriteXml};
 
 #[derive(Debug, Clone)]
 pub struct Validate {
@@ -12,6 +17,10 @@ pub struct Validate {
 }
 
 impl Operation for Validate {
+    const NAME: &'static str = "validate";
+    const REQUIRED_CAPABILITIES: Requirements =
+        Requirements::Any(&[Capability::ValidateV1_0, Capability::ValidateV1_1]);
+
     type Builder<'a> = Builder<'a>;
     type ReplyData = Empty;
 }
@@ -21,7 +30,7 @@ impl WriteXml for Validate {
 
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
         _ = Writer::new(writer)
-            .create_element("validate")
+            .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 _ = writer
                     .create_element("source")
@@ -36,39 +45,35 @@ impl WriteXml for Validate {
 #[must_use]
 pub struct Builder<'a> {
     ctx: &'a Context,
-    source: Option<Source>,
+    source: Required<Source>,
 }
 
 impl Builder<'_> {
     pub fn source(mut self, source: Datastore) -> Result<Self, Error> {
         source.try_as_source(self.ctx).map(|source| {
-            self.source = Some(Source::Datastore(source));
+            self.source.set(Source::Datastore(source));
             self
         })
     }
 
     pub fn config(mut self, config: String) -> Self {
-        self.source = Some(Source::Config(config));
+        self.source.set(Source::Config(config));
         self
     }
 }
 
 impl<'a> super::Builder<'a, Validate> for Builder<'a> {
     fn new(ctx: &'a Context) -> Self {
-        Self { ctx, source: None }
+        Self {
+            ctx,
+            source: Required::init(),
+        }
     }
 
     fn finish(self) -> Result<Validate, Error> {
-        self.ctx.try_operation(
-            &[&Capability::ValidateV1_0, &Capability::ValidateV1_1],
-            "<validate>",
-            || {
-                let source = self
-                    .source
-                    .ok_or_else(|| Error::MissingOperationParameter("validate", "source"))?;
-                Ok(Validate { source })
-            },
-        )
+        Ok(Validate {
+            source: self.source.require::<Validate>("source")?,
+        })
     }
 }
 

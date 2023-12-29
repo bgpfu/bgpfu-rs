@@ -2,7 +2,7 @@ use std::io::Write;
 
 use quick_xml::Writer;
 
-use crate::{session::Context, Error};
+use crate::{capabilities::Requirements, session::Context, Error};
 
 use super::{Filter, Operation, Reply, WriteXml};
 
@@ -12,6 +12,9 @@ pub struct Get {
 }
 
 impl Operation for Get {
+    const NAME: &'static str = "get";
+    const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
+
     type Builder<'a> = Builder;
     type ReplyData = Reply;
 }
@@ -21,7 +24,7 @@ impl WriteXml for Get {
 
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
         _ = Writer::new(writer)
-            .create_element("get")
+            .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 if let Some(ref filter) = self.filter {
                     filter.write_xml(writer.get_mut())?;

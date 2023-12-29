@@ -454,15 +454,20 @@ mod tests {
     use std::io::Write;
 
     use super::*;
-    use crate::message::{
-        rpc::{operation, Empty, MessageId, Operation, PartialReply, Reply, ReplyInner},
-        ServerMsg, WriteXml,
+    use crate::{
+        capabilities::Requirements,
+        message::{
+            rpc::{operation, Empty, MessageId, Operation, PartialReply, Reply, ReplyInner},
+            ServerMsg, WriteXml,
+        },
     };
 
     #[derive(Debug, PartialEq)]
     struct Dummy;
 
     impl Operation for Dummy {
+        const NAME: &'static str = "dummy";
+        const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
         type Builder<'a> = Builder;
         type ReplyData = Empty;
     }

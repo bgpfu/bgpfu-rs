@@ -2,7 +2,12 @@ use std::{io::Write, time::Duration};
 
 use quick_xml::{events::BytesText, Writer};
 
-use crate::{capabilities::Capability, message::rpc::Empty, session::Context, Error};
+use crate::{
+    capabilities::{Capability, Requirements},
+    message::rpc::Empty,
+    session::Context,
+    Error,
+};
 
 use super::{Operation, Token, WriteXml};
 
@@ -15,6 +20,9 @@ pub struct Commit {
 }
 
 impl Operation for Commit {
+    const NAME: &'static str = "commit";
+    const REQUIRED_CAPABILITIES: Requirements = Requirements::One(Capability::Candidate);
+
     type Builder<'a> = Builder<'a>;
     type ReplyData = Empty;
 }
@@ -78,68 +86,61 @@ pub struct Builder<'a> {
 
 impl Builder<'_> {
     pub fn confirmed(mut self, confirmed: bool) -> Result<Self, Error> {
-        if confirmed && !self.can_use_confirmed() {
-            Err(Error::UnsupportedOperationParameter(
-                "<commit>",
-                "<confirmed/>",
-                Capability::ConfirmedCommitV1_0,
-            ))
-        } else {
+        self.try_use_confirmed("confirmed").map(|()| {
             self.confirmed = confirmed;
-            Ok(self)
-        }
+            self
+        })
     }
 
     pub fn confirm_timeout(mut self, timeout: Duration) -> Result<Self, Error> {
-        if self.can_use_confirmed() {
+        self.try_use_confirmed("confirm-timeout").map(|()| {
             self.confirm_timeout = Timeout(timeout);
-            Ok(self)
-        } else {
-            Err(Error::UnsupportedOperationParameter(
-                "<commit>",
-                "<confirm-timeout>",
-                Capability::ConfirmedCommitV1_0,
-            ))
-        }
-    }
-
-    fn can_use_confirmed(&self) -> bool {
-        self.ctx.server_capabilities().contains_any(&[
-            &Capability::ConfirmedCommitV1_0,
-            &Capability::ConfirmedCommitV1_1,
-        ])
-    }
-
-    fn can_use_persist(&self) -> bool {
-        self.ctx
-            .server_capabilities()
-            .contains(&Capability::ConfirmedCommitV1_1)
+            self
+        })
     }
 
     pub fn persist(mut self, token: Option<Token>) -> Result<Self, Error> {
-        if token.is_some() && !self.can_use_persist() {
-            Err(Error::UnsupportedOperationParameter(
-                "<commit>",
-                "<persist>",
-                Capability::ConfirmedCommitV1_1,
-            ))
-        } else {
+        self.try_use_persist("persist").map(|()| {
             self.persist = token;
-            Ok(self)
-        }
+            self
+        })
     }
 
     pub fn persist_id(mut self, token: Option<Token>) -> Result<Self, Error> {
-        if token.is_some() && !self.can_use_persist() {
-            Err(Error::UnsupportedOperationParameter(
-                "<commit>",
-                "<persist-id>",
-                Capability::ConfirmedCommitV1_1,
-            ))
-        } else {
+        self.try_use_persist("persist-id").map(|()| {
             self.persist_id = token;
-            Ok(self)
-        }
+            self
+        })
+    }
+
+    fn try_use_confirmed(&self, param_name: &'static str) -> Result<(), Error> {
+        let required_capabilities = Requirements::Any(&[
+            Capability::ConfirmedCommitV1_0,
+            Capability::ConfirmedCommitV1_1,
+        ]);
+        self.try_use(required_capabilities, param_name)
+    }
+
+    fn try_use_persist(&self, param_name: &'static str) -> Result<(), Error> {
+        let required_capabilities = Requirements::One(Capability::ConfirmedCommitV1_1);
+        self.try_use(required_capabilities, param_name)
+    }
+
+    fn try_use(
+        &self,
+        required_capabilities: Requirements,
+        param_name: &'static str,
+    ) -> Result<(), Error> {
+        required_capabilities
+            .check(self.ctx.server_capabilities())
+            .then_some(())
+            .ok_or_else(|| {
+                Error::UnsupportedOperationParameter(
+                    Commit::NAME,
+                    param_name,
+                    required_capabilities,
+                )
+            })
     }
 }
 
@@ -155,27 +156,24 @@ impl<'a> super::Builder<'a, Commit> for Builder<'a> {
     }
 
     fn finish(self) -> Result<Commit, Error> {
-        self.ctx
-            .try_operation(&[&Capability::Candidate], "<commit/>", || {
-                if self.confirmed && self.persist_id.is_some() {
-                    return Err(Error::IncompatibleOperationParameters(
-                        "commit",
-                        vec!["confirmed = true", "persist-id"],
-                    ));
-                }
-                if !self.confirmed && self.persist.is_some() {
-                    return Err(Error::IncompatibleOperationParameters(
-                        "commit",
-                        vec!["confirmed = false", "persist"],
-                    ));
-                }
-                Ok(Commit {
-                    confirmed: self.confirmed,
-                    confirm_timeout: self.confirm_timeout,
-                    persist: self.persist,
-                    persist_id: self.persist_id,
-                })
-            })
+        if self.confirmed && self.persist_id.is_some() {
+            return Err(Error::IncompatibleOperationParameters(
+                "commit",
+                vec!["confirmed = true", "persist-id"],
+            ));
+        }
+        if !self.confirmed && self.persist.is_some() {
+            return Err(Error::IncompatibleOperationParameters(
+                "commit",
+                vec!["confirmed = false", "persist"],
+            ));
+        }
+        Ok(Commit {
+            confirmed: self.confirmed,
+            confirm_timeout: self.confirm_timeout,
+            persist: self.persist,
+            persist_id: self.persist_id,
+        })
     }
 }
 

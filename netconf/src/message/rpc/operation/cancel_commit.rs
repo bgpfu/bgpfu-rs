@@ -2,7 +2,12 @@ use std::io::Write;
 
 use quick_xml::{events::BytesText, Writer};
 
-use crate::{capabilities::Capability, message::rpc::Empty, session::Context, Error};
+use crate::{
+    capabilities::{Capability, Requirements},
+    message::rpc::Empty,
+    session::Context,
+    Error,
+};
 
 use super::{Operation, Token, WriteXml};
 
@@ -12,6 +17,9 @@ pub struct CancelCommit {
 }
 
 impl Operation for CancelCommit {
+    const NAME: &'static str = "cancel-commit";
+    const REQUIRED_CAPABILITIES: Requirements = Requirements::One(Capability::ConfirmedCommitV1_1);
+
     type Builder<'a> = Builder<'a>;
     type ReplyData = Empty;
 }
@@ -45,20 +53,16 @@ pub struct Builder<'a> {
 
 impl Builder<'_> {
     pub fn persist_id(mut self, token: Option<Token>) -> Result<Self, Error> {
-        if token.is_some()
-            && !self
-                .ctx
-                .server_capabilities()
-                .contains(&Capability::ConfirmedCommitV1_1)
-        {
-            Err(Error::UnsupportedOperationParameter(
-                "<cancel-commit>",
-                "<persist-id>",
-                Capability::ConfirmedCommitV1_1,
-            ))
-        } else {
+        let required_capabilities = Requirements::One(Capability::ConfirmedCommitV1_1);
+        if required_capabilities.check(self.ctx.server_capabilities()) {
             self.persist_id = token;
             Ok(self)
+        } else {
+            Err(Error::UnsupportedOperationParameter(
+                CancelCommit::NAME,
+                "persist-id",
+                required_capabilities,
+            ))
         }
     }
 }
@@ -72,15 +76,9 @@ impl<'a> super::Builder<'a, CancelCommit> for Builder<'a> {
     }
 
     fn finish(self) -> Result<CancelCommit, Error> {
-        self.ctx.try_operation(
-            &[&Capability::ConfirmedCommitV1_1],
-            "<cancel-commit/>",
-            || {
-                Ok(CancelCommit {
-                    persist_id: self.persist_id,
-                })
-            },
-        )
+        Ok(CancelCommit {
+            persist_id: self.persist_id,
+        })
     }
 }
 

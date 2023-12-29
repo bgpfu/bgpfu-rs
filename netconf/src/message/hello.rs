@@ -7,7 +7,7 @@ use quick_xml::{
 };
 
 use crate::{
-    capabilities::{Capabilities, Capability },
+    capabilities::{Capabilities, Capability},
     session::SessionId,
     Error,
 };
@@ -165,18 +165,51 @@ mod tests {
                 Capability::ConfirmedCommitV1_0,
                 Capability::ValidateV1_0,
                 Capability::Url(vec!["http".into(), "ftp".into(), "file".into()]),
-                Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:base:1.0").unwrap().into()),
-                Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:capability:candidate:1.0").unwrap().into()),
                 Capability::Unknown(
-                    UriStr::new("urn:ietf:params:xml:ns:netconf:capability:confirmed-commit:1.0").unwrap().into(),
+                    UriStr::new("urn:ietf:params:xml:ns:netconf:base:1.0")
+                        .unwrap()
+                        .into(),
                 ),
-                Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:capability:validate:1.0").unwrap().into()),
                 Capability::Unknown(
-                    UriStr::new("urn:ietf:params:xml:ns:netconf:capability:url:1.0?scheme=http,ftp,file").unwrap().into(),
+                    UriStr::new("urn:ietf:params:xml:ns:netconf:capability:candidate:1.0")
+                        .unwrap()
+                        .into(),
                 ),
-                Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring").unwrap().into()),
-                Capability::Unknown(UriStr::new("http://xml.juniper.net/netconf/junos/1.0").unwrap().into()),
-                Capability::Unknown(UriStr::new("http://xml.juniper.net/dmi/system/1.0").unwrap().into()),
+                Capability::Unknown(
+                    UriStr::new("urn:ietf:params:xml:ns:netconf:capability:confirmed-commit:1.0")
+                        .unwrap()
+                        .into(),
+                ),
+                Capability::Unknown(
+                    UriStr::new("urn:ietf:params:xml:ns:netconf:capability:validate:1.0")
+                        .unwrap()
+                        .into(),
+                ),
+                Capability::Unknown(
+                    UriStr::new(
+                        "urn:ietf:params:xml:ns:netconf:capability:url:1.0?scheme=http,ftp,file",
+                    )
+                    .unwrap()
+                    .into(),
+                ),
+                Capability::Unknown(
+                    UriStr::new("urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring")
+                        .unwrap()
+                        .into(),
+                ),
+                #[cfg(feature = "junos")]
+                Capability::JunosXmlManagementProtocol,
+                #[cfg(not(feature = "junos"))]
+                Capability::Unknown(
+                    UriStr::new("http://xml.juniper.net/netconf/junos/1.0")
+                        .unwrap()
+                        .into(),
+                ),
+                Capability::Unknown(
+                    UriStr::new("http://xml.juniper.net/dmi/system/1.0")
+                        .unwrap()
+                        .into(),
+                ),
             ]
             .into_iter()
             .collect(),
@@ -212,30 +245,33 @@ mod tests {
             ]]>]]>
         "#;
         let expect = ServerHello {
-            capabilities: 
-                [
-                    Capability::Base(Base::V1_0),
-                    Capability::Candidate,
-                    Capability::ConfirmedCommitV1_0,
-                    Capability::ValidateV1_0,
-                    Capability::Url(vec!["http".into(), "ftp".into(), "file".into()]),
-                    Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:base:1.0?module=ietf-netconf&amp;revision=2011-06-01").unwrap().into()),
-                    Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:capability:candidate:1.0").unwrap().into()),
-                    Capability::Unknown(
-                        UriStr::new("urn:ietf:params:xml:ns:netconf:capability:confirmed-commit:1.0").unwrap().into(),
-                    ),
-                    Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:capability:validate:1.0").unwrap().into()),
-                    Capability::Unknown(
-                        UriStr::new("urn:ietf:params:xml:ns:netconf:capability:url:1.0?scheme=http,ftp,file").unwrap().into(),
-                    ),
-                    Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:yang:ietf-inet-types?module=ietf-inet-types&amp;revision=2013-07-15").unwrap().into()),
-                    Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:yang:ietf-yang-metadata?module=ietf-yang-metadata&amp;revision=2016-08-05").unwrap().into()),
-                    Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring").unwrap().into()),
-                    Capability::Unknown(UriStr::new("http://xml.juniper.net/netconf/junos/1.0").unwrap().into()),
-                    Capability::Unknown(UriStr::new("http://xml.juniper.net/dmi/system/1.0").unwrap().into()),
-                    Capability::Unknown(UriStr::new("http://yang.juniper.net/junos/jcmd?module=junos-configuration-metadata&amp;revision=2021-09-01").unwrap().into()),
-                ]
-                .into_iter().collect(),
+            capabilities: [
+                Capability::Base(Base::V1_0),
+                Capability::Candidate,
+                Capability::ConfirmedCommitV1_0,
+                Capability::ValidateV1_0,
+                Capability::Url(vec!["http".into(), "ftp".into(), "file".into()]),
+                Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:base:1.0?module=ietf-netconf&amp;revision=2011-06-01").unwrap().into()),
+                Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:capability:candidate:1.0").unwrap().into()),
+                Capability::Unknown(
+                    UriStr::new("urn:ietf:params:xml:ns:netconf:capability:confirmed-commit:1.0").unwrap().into(),
+                ),
+                Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:netconf:capability:validate:1.0").unwrap().into()),
+                Capability::Unknown(
+                    UriStr::new("urn:ietf:params:xml:ns:netconf:capability:url:1.0?scheme=http,ftp,file").unwrap().into(),
+                ),
+                Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:yang:ietf-inet-types?module=ietf-inet-types&amp;revision=2013-07-15").unwrap().into()),
+                Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:yang:ietf-yang-metadata?module=ietf-yang-metadata&amp;revision=2016-08-05").unwrap().into()),
+                Capability::Unknown(UriStr::new("urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring").unwrap().into()),
+                #[cfg(feature = "junos")]
+                Capability::JunosXmlManagementProtocol,
+                #[cfg(not(feature = "junos"))]
+                Capability::Unknown(UriStr::new("http://xml.juniper.net/netconf/junos/1.0").unwrap().into()),
+                Capability::Unknown(UriStr::new("http://xml.juniper.net/dmi/system/1.0").unwrap().into()),
+                Capability::Unknown(UriStr::new("http://yang.juniper.net/junos/jcmd?module=junos-configuration-metadata&amp;revision=2021-09-01").unwrap().into()),
+            ]
+            .into_iter()
+            .collect(),
             session_id: SessionId::new(43129).unwrap(),
         };
         assert_eq!(expect, ServerHello::from_xml(xml).unwrap());
@@ -244,8 +280,7 @@ mod tests {
     #[test]
     fn client_hello_to_xml() {
         let req = ClientHello {
-            capabilities: 
-                std::iter::once(Capability::Base(Base::V1_0)).collect(),
+            capabilities: std::iter::once(Capability::Base(Base::V1_0)).collect(),
         };
         let expect = "<hello><capabilities><capability>urn:ietf:params:netconf:base:1.0</capability></capabilities></hello>]]>]]>";
         assert_eq!(req.to_xml().unwrap(), expect);

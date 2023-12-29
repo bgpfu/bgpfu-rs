@@ -2,9 +2,9 @@ use std::io::Write;
 
 use quick_xml::Writer;
 
-use crate::{message::rpc::Empty, session::Context, Error};
+use crate::{capabilities::Requirements, message::rpc::Empty, session::Context, Error};
 
-use super::{Datastore, Operation, Url, WriteXml};
+use super::{params::Required, Datastore, Operation, Url, WriteXml};
 
 #[derive(Debug, Clone)]
 pub struct DeleteConfig {
@@ -12,6 +12,9 @@ pub struct DeleteConfig {
 }
 
 impl Operation for DeleteConfig {
+    const NAME: &'static str = "delete-config";
+    const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
+
     type Builder<'a> = Builder<'a>;
     type ReplyData = Empty;
 }
@@ -21,7 +24,7 @@ impl WriteXml for DeleteConfig {
 
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
         _ = Writer::new(writer)
-            .create_element("delete-config")
+            .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 _ = writer
                     .create_element("target")
@@ -36,7 +39,7 @@ impl WriteXml for DeleteConfig {
 #[must_use]
 pub struct Builder<'a> {
     ctx: &'a Context,
-    target: Option<Target>,
+    target: Required<Target>,
 }
 
 impl Builder<'_> {
@@ -45,14 +48,14 @@ impl Builder<'_> {
             return Err(Error::DeleteRunningConfig);
         };
         target.try_as_target(self.ctx).map(|target| {
-            self.target = Some(Target::Datastore(target));
+            self.target.set(Target::Datastore(target));
             self
         })
     }
 
     pub fn url<S: AsRef<str>>(mut self, url: S) -> Result<Self, Error> {
         Url::try_new(url, self.ctx).map(|url| {
-            self.target = Some(Target::Url(url));
+            self.target.set(Target::Url(url));
             self
         })
     }
@@ -60,14 +63,16 @@ impl Builder<'_> {
 
 impl<'a> super::Builder<'a, DeleteConfig> for Builder<'a> {
     fn new(ctx: &'a Context) -> Self {
-        Self { ctx, target: None }
+        Self {
+            ctx,
+            target: Required::init(),
+        }
     }
 
     fn finish(self) -> Result<DeleteConfig, Error> {
-        let target = self
-            .target
-            .ok_or_else(|| Error::MissingOperationParameter("delete-config", "target"))?;
-        Ok(DeleteConfig { target })
+        Ok(DeleteConfig {
+            target: self.target.require::<DeleteConfig>("target")?,
+        })
     }
 }
 

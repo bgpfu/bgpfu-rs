@@ -2,7 +2,12 @@ use std::io::Write;
 
 use quick_xml::Writer;
 
-use crate::{capabilities::Capability, message::rpc::Empty, session::Context, Error};
+use crate::{
+    capabilities::{Capability, Requirements},
+    message::rpc::Empty,
+    session::Context,
+    Error,
+};
 
 use super::{Operation, WriteXml};
 
@@ -13,6 +18,9 @@ pub struct DiscardChanges {
 }
 
 impl Operation for DiscardChanges {
+    const NAME: &'static str = "discard-changes";
+    const REQUIRED_CAPABILITIES: Requirements = Requirements::One(Capability::Candidate);
+
     type Builder<'a> = Builder<'a>;
     type ReplyData = Empty;
 }
@@ -31,19 +39,16 @@ impl WriteXml for DiscardChanges {
 #[derive(Debug, Clone)]
 #[must_use]
 pub struct Builder<'a> {
-    ctx: &'a Context,
+    _ctx: &'a Context,
 }
 
 impl<'a> super::Builder<'a, DiscardChanges> for Builder<'a> {
     fn new(ctx: &'a Context) -> Self {
-        Self { ctx }
+        Self { _ctx: ctx }
     }
 
     fn finish(self) -> Result<DiscardChanges, Error> {
-        self.ctx
-            .try_operation(&[&Capability::Candidate], "<discard-changes/>", || {
-                Ok(DiscardChanges { _inner: () })
-            })
+        Ok(DiscardChanges { _inner: () })
     }
 }
 

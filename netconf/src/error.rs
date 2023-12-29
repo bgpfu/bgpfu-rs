@@ -3,7 +3,7 @@ use iri_string::types::UriStr;
 use tokio::sync::mpsc;
 
 use crate::{
-    capabilities::Capability,
+    capabilities::Requirements,
     message::rpc::{self, operation::Datastore},
 };
 
@@ -112,35 +112,29 @@ pub enum Error {
     #[error("kill-session operation targeting the current session is not permitted")]
     KillCurrentSession,
 
-    #[error(
-        "unsupported rpc operation '{0}' (requires one of the capabilities '{}')",
-        .1.iter().map(|c| format!("{c:?}")).collect::<Vec<_>>().join(", ")
-    )]
-    UnsupportedOperation(&'static str, Vec<Capability>),
+    #[error("unsupported rpc operation '{0}' (requires {1})")]
+    UnsupportedOperation(&'static str, Requirements),
 
-    #[error("unsupported parameter '{1}' for rpc operation '{0}' (requires capability '{2:?}')")]
-    UnsupportedOperationParameter(&'static str, &'static str, Capability),
+    #[error("unsupported parameter '{1}' for rpc operation '{0}' (requires {2})")]
+    UnsupportedOperationParameter(&'static str, &'static str, Requirements),
 
-    #[error(
-        "unsupported value '{2}' of parameter '{1}' for rpc operation '{0}' (requires one of the capabilities '{}')",
-        .3.iter().map(|c| format!("{c:?}")).collect::<Vec<_>>().join(", ")
-    )]
-    UnsupportedOperParameterValue(&'static str, &'static str, &'static str, Vec<Capability>),
+    #[error("unsupported value '{2}' of parameter '{1}' for rpc operation '{0}' (requires {3})")]
+    UnsupportedOperParameterValue(&'static str, &'static str, &'static str, Requirements),
 
-    #[error("unsupported source datastore '{0:?}' (requires capability '{1:?}')")]
-    UnsupportedSource(Datastore, Capability),
+    #[error("unsupported source datastore '{0:?}' (requires {1})")]
+    UnsupportedSource(Datastore, Requirements),
 
-    #[error("unsupported target datastore '{0:?}' (requires capability '{1:?}')")]
-    UnsupportedTarget(Datastore, Capability),
+    #[error("unsupported target datastore '{0:?}' (requires {1})")]
+    UnsupportedTarget(Datastore, Requirements),
 
-    #[error("unsupported lock target datastore '{0:?}' (requires capability '{1:?}')")]
-    UnsupportedLockTarget(Datastore, Capability),
+    #[error("unsupported lock target datastore '{0:?}' (requires {1})")]
+    UnsupportedLockTarget(Datastore, Requirements),
 
     #[error("unsupported scheme in url '{0}' (requires ':url:1.0' capability with corresponding 'scheme' parameter)")]
     UnsupportedUrlScheme(Box<UriStr>),
 
-    #[error("unsupported filter type '{0}' (requires capability '{1:?}')")]
-    UnsupportedFilterType(&'static str, Capability),
+    #[error("unsupported filter type '{0}' (requires {1})")]
+    UnsupportedFilterType(&'static str, Requirements),
 
     #[error("incompatible parameter combination for operation '{0}': {}", .1.join(", "))]
     IncompatibleOperationParameters(&'static str, Vec<&'static str>),

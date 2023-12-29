@@ -13,6 +13,9 @@ categories.workspace = true
 [lib]
 name = "netconf"
 
+[features]
+junos = []
+
 [dependencies]
 tokio.workspace = true
 thiserror.workspace = true

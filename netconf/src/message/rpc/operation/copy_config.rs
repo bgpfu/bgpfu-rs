@@ -2,9 +2,9 @@ use std::io::Write;
 
 use quick_xml::Writer;
 
-use crate::{message::rpc::Empty, session::Context, Error};
+use crate::{capabilities::Requirements, message::rpc::Empty, session::Context, Error};
 
-use super::{Datastore, Operation, Source, WriteXml};
+use super::{params::Required, Datastore, Operation, Source, WriteXml};
 
 #[derive(Debug, Clone)]
 pub struct CopyConfig {
@@ -13,6 +13,9 @@ pub struct CopyConfig {
 }
 
 impl Operation for CopyConfig {
+    const NAME: &'static str = "copy-config";
+    const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
+
     type Builder<'a> = Builder<'a>;
     type ReplyData = Empty;
 }
@@ -22,7 +25,7 @@ impl WriteXml for CopyConfig {
 
     fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
         _ = Writer::new(writer)
-            .create_element("copy-config")
+            .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 _ = writer
                     .create_element("target")
@@ -40,27 +43,27 @@ impl WriteXml for CopyConfig {
 #[must_use]
 pub struct Builder<'a> {
     ctx: &'a Context,
-    target: Option<Target>,
-    source: Option<Source>,
+    target: Required<Target>,
+    source: Required<Source>,
 }
 
 impl Builder<'_> {
     pub fn target(mut self, target: Datastore) -> Result<Self, Error> {
         target.try_as_target(self.ctx).map(|target| {
-            self.target = Some(Target::Datastore(target));
+            self.target.set(Target::Datastore(target));
             self
         })
     }
 
     pub fn source(mut self, source: Datastore) -> Result<Self, Error> {
         source.try_as_source(self.ctx).map(|source| {
-            self.source = Some(Source::Datastore(source));
+            self.source.set(Source::Datastore(source));
             self
         })
     }
 
     pub fn config(mut self, config: String) -> Self {
-        self.source = Some(Source::Config(config));
+        self.source.set(Source::Config(config));
         self
     }
 }
@@ -69,19 +72,16 @@ impl<'a> super::Builder<'a, CopyConfig> for Builder<'a> {
     fn new(ctx: &'a Context) -> Self {
         Self {
             ctx,
-            target: None,
-            source: None,
+            target: Required::init(),
+            source: Required::init(),
         }
     }
 
     fn finish(self) -> Result<CopyConfig, Error> {
-        let target = self
-            .target
-            .ok_or_else(|| Error::MissingOperationParameter("copy-config", "target"))?;
-        let source = self
-            .source
-            .ok_or_else(|| Error::MissingOperationParameter("copy-config", "source"))?;
-        Ok(CopyConfig { target, source })
+        Ok(CopyConfig {
+            target: self.target.require::<CopyConfig>("target")?,
+            source: self.source.require::<CopyConfig>("source")?,
+        })
     }
 }
 
