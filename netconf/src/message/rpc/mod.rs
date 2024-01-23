@@ -1,4 +1,4 @@
-use std::{convert::Infallible, fmt::Debug, io::Write, str::from_utf8};
+use std::{fmt::Debug, io::Write, str::from_utf8};
 
 use quick_xml::{
     events::{attributes::Attribute, BytesStart, Event},
@@ -6,7 +6,7 @@ use quick_xml::{
     NsReader, Writer,
 };
 
-use super::{xmlns, ClientMsg, ReadXml, ServerMsg, WriteXml, MARKER};
+use super::{xmlns, ClientMsg, ReadError, ReadXml, ServerMsg, WriteError, WriteXml, MARKER};
 
 pub mod error;
 pub use self::error::{Error, Errors};
@@ -26,10 +26,16 @@ impl MessageId {
 }
 
 impl TryFrom<Attribute<'_>> for MessageId {
-    type Error = crate::Error;
+    type Error = ReadError;
 
     fn try_from(value: Attribute<'_>) -> Result<Self, Self::Error> {
-        Ok(Self(value.unescape_value()?.as_ref().parse()?))
+        Ok(Self(
+            value
+                .unescape_value()?
+                .as_ref()
+                .parse()
+                .map_err(ReadError::MessageIdParse)?,
+        ))
     }
 }
 
@@ -49,18 +55,12 @@ impl<O: Operation> Request<O> {
 }
 
 impl<O: Operation> WriteXml for Request<O> {
-    type Error = crate::Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
-        _ = Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
+        Writer::new(writer)
             .create_element("rpc")
             .with_attribute(("message-id", self.message_id.0.to_string().as_ref()))
-            .write_inner_content(|writer| {
-                self.operation
-                    .write_xml(writer.get_mut())
-                    .map_err(|err| Self::Error::RpcRequestSerialization(err.into()))
-            })?;
-        Ok(())
+            .write_inner_content(|writer| self.operation.write_xml(writer.get_mut()))
+            .map(|_| ())
     }
 }
 
@@ -86,7 +86,7 @@ impl ServerMsg for PartialReply {
     // This is a hack - we need to find a way to save the buffer without resorting to this trick
     // of calling `read_xml` with a dummy start tag
     #[tracing::instrument(skip(input))]
-    fn from_xml<S>(input: S) -> Result<Self, crate::Error>
+    fn from_xml<S>(input: S) -> Result<Self, ReadError>
     where
         S: AsRef<str> + Debug,
     {
@@ -98,10 +98,8 @@ impl ServerMsg for PartialReply {
 }
 
 impl ReadXml for PartialReply {
-    type Error = crate::Error;
-
     #[tracing::instrument(skip(reader))]
-    fn read_xml(reader: &mut NsReader<&[u8]>, _: &BytesStart<'_>) -> Result<Self, Self::Error> {
+    fn read_xml(reader: &mut NsReader<&[u8]>, _: &BytesStart<'_>) -> Result<Self, ReadError> {
         let buf = from_utf8(reader.get_ref())?.into();
         tracing::debug!("expecting <{}>", Self::TAG_NAME);
         let mut message_id = None;
@@ -124,12 +122,12 @@ impl ReadXml for PartialReply {
                 (_, Event::Text(txt)) if &*txt == MARKER => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
-                    return Err(crate::Error::UnexpectedXmlEvent(event.into_owned()));
+                    return Err(ReadError::UnexpectedXmlEvent(event.into_owned()));
                 }
             }
         }
         Ok(Self {
-            message_id: message_id.ok_or_else(|| crate::Error::NoMessageId)?,
+            message_id: message_id.ok_or_else(|| ReadError::NoMessageId)?,
             buf,
         })
     }
@@ -152,14 +150,12 @@ impl<O: Operation> Reply<O> {
 }
 
 impl<O: Operation> ReadXml for Reply<O> {
-    type Error = crate::Error;
-
     #[tracing::instrument(skip(reader))]
-    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, Self::Error> {
+    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         tracing::debug!("trying to parse message-id");
         let message_id = start
             .try_get_attribute("message-id")?
-            .ok_or_else(|| crate::Error::NoMessageId)
+            .ok_or_else(|| ReadError::NoMessageId)
             .and_then(MessageId::try_from)?;
         let inner = ReplyInner::read_xml(reader, start)?;
         Ok(Self { message_id, inner })
@@ -172,15 +168,15 @@ impl<O: Operation> ServerMsg for Reply<O> {
 }
 
 impl<O: Operation> TryFrom<PartialReply> for Reply<O> {
-    type Error = crate::Error;
+    type Error = ReadError;
 
     #[tracing::instrument(err, level = "debug")]
     fn try_from(value: PartialReply) -> Result<Self, Self::Error> {
         let this = Self::from_xml(&value.buf)?;
         if this.message_id != value.message_id {
-            return Err(crate::Error::MessageIdMismatch(
-                this.message_id,
+            return Err(Self::Error::message_id_mismatch(
                 value.message_id,
+                this.message_id,
             ));
         };
         Ok(this)
@@ -195,10 +191,8 @@ pub(crate) enum ReplyInner<D> {
 }
 
 impl<D: ReadXml> ReadXml for ReplyInner<D> {
-    type Error = crate::Error;
-
     #[tracing::instrument(skip(reader))]
-    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, Self::Error> {
+    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
         let mut errors = Errors::new();
         let mut this = None;
@@ -212,10 +206,7 @@ impl<D: ReadXml> ReadXml for ReplyInner<D> {
                         && errors.is_empty() =>
                 {
                     tracing::debug!(?tag);
-                    this = Some(Self::Data(
-                        D::read_xml(reader, &tag)
-                            .map_err(|err| crate::Error::ReadXml(err.into()))?,
-                    ));
+                    this = Some(Self::Data(D::read_xml(reader, &tag)?));
                 }
                 (ResolveResult::Bound(ns), Event::Empty(tag))
                     if ns == xmlns::BASE
@@ -238,12 +229,12 @@ impl<D: ReadXml> ReadXml for ReplyInner<D> {
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
-                    return Err(crate::Error::UnexpectedXmlEvent(event.into_owned()));
+                    return Err(ReadError::UnexpectedXmlEvent(event.into_owned()));
                 }
             }
         }
         this.or_else(|| (!errors.is_empty()).then(|| Self::RpcError(errors)))
-            .ok_or_else(|| crate::Error::MissingElement("rpc-reply", "<data>/<ok>/<rpc-error>"))
+            .ok_or_else(|| ReadError::missing_element("rpc-reply", "data/ok/rpc-error"))
     }
 }
 
@@ -251,9 +242,7 @@ impl<D: ReadXml> ReadXml for ReplyInner<D> {
 pub enum Empty {}
 
 impl ReadXml for Empty {
-    type Error = Infallible;
-
-    fn read_xml(_: &mut NsReader<&[u8]>, _: &BytesStart<'_>) -> Result<Self, Self::Error> {
+    fn read_xml(_: &mut NsReader<&[u8]>, _: &BytesStart<'_>) -> Result<Self, ReadError> {
         unreachable!()
     }
 }
@@ -283,9 +272,7 @@ mod tests {
     }
 
     impl WriteXml for Foo {
-        type Error = crate::Error;
-
-        fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+        fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
             _ = Writer::new(writer)
                 .create_element("foo")
                 .write_text_content(BytesText::new(self.foo))?;
@@ -313,7 +300,7 @@ mod tests {
         fn finish(self) -> Result<Foo, crate::Error> {
             let foo = self
                 .foo
-                .ok_or_else(|| crate::Error::MissingOperationParameter("foo", "foo"))?;
+                .ok_or_else(|| crate::Error::missing_operation_parameter("foo", "foo"))?;
             Ok(Foo { foo })
         }
     }
@@ -376,9 +363,7 @@ mod tests {
     struct Bar;
 
     impl WriteXml for Bar {
-        type Error = crate::Error;
-
-        fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+        fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
             _ = Writer::new(writer).create_element("bar").write_empty()?;
             Ok(())
         }
@@ -395,12 +380,10 @@ mod tests {
     struct BarReply(usize);
 
     impl ReadXml for BarReply {
-        type Error = crate::Error;
-
         fn read_xml(
             reader: &mut NsReader<&[u8]>,
             start: &BytesStart<'_>,
-        ) -> Result<Self, Self::Error> {
+        ) -> Result<Self, ReadError> {
             let end = start.to_end();
             let mut result = None;
             loop {
@@ -410,18 +393,23 @@ mod tests {
                             && tag.local_name().as_ref() == b"result"
                             && result.is_none() =>
                     {
-                        result = Some(reader.read_text(tag.to_end().name())?.parse()?);
+                        result = Some(
+                            reader
+                                .read_text(tag.to_end().name())?
+                                .parse::<usize>()
+                                .map_err(|err| ReadError::Other(err.into()))?,
+                        );
                     }
                     (_, Event::Comment(_)) => continue,
                     (_, Event::End(tag)) if tag == end => break,
                     (ns, event) => {
                         tracing::error!(?event, ?ns, "unexpected xml event");
-                        return Err(crate::Error::UnexpectedXmlEvent(event.into_owned()));
+                        return Err(ReadError::UnexpectedXmlEvent(event.into_owned()));
                     }
                 }
             }
             Ok(Self(result.ok_or_else(|| {
-                crate::Error::MissingElement("rpc-reply", "<result>")
+                ReadError::missing_element("rpc-reply", "result")
             })?))
         }
     }

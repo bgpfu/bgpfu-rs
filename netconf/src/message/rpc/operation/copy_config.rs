@@ -2,7 +2,12 @@ use std::io::Write;
 
 use quick_xml::Writer;
 
-use crate::{capabilities::Requirements, message::rpc::Empty, session::Context, Error};
+use crate::{
+    capabilities::Requirements,
+    message::{rpc::Empty, WriteError},
+    session::Context,
+    Error,
+};
 
 use super::{params::Required, Datastore, Operation, Source, WriteXml};
 
@@ -21,10 +26,8 @@ impl Operation for CopyConfig {
 }
 
 impl WriteXml for CopyConfig {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
-        _ = Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
+        Writer::new(writer)
             .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 _ = writer
@@ -33,9 +36,9 @@ impl WriteXml for CopyConfig {
                 _ = writer
                     .create_element("source")
                     .write_inner_content(|writer| self.source.write_xml(writer.get_mut()))?;
-                Ok::<_, Self::Error>(())
-            })?;
-        Ok(())
+                Ok(())
+            })
+            .map(|_| ())
     }
 }
 
@@ -91,9 +94,7 @@ enum Target {
 }
 
 impl WriteXml for Target {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
         match self {
             Self::Datastore(datastore) => datastore.write_xml(writer),
         }

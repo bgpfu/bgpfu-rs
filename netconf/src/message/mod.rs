@@ -1,4 +1,4 @@
-use std::{fmt::Debug, io::Write, str::from_utf8, string::FromUtf8Error};
+use std::{fmt::Debug, io::Write, str::from_utf8};
 
 use async_trait::async_trait;
 use quick_xml::{
@@ -12,6 +12,9 @@ use crate::{
     Error,
 };
 
+mod error;
+pub use self::error::{Read as ReadError, Write as WriteError};
+
 mod hello;
 pub(crate) use self::hello::{ClientHello, ServerHello};
 
@@ -22,23 +25,16 @@ pub(crate) mod xmlns;
 pub(crate) const MARKER: &[u8] = b"]]>]]>";
 
 pub trait ReadXml: Sized {
-    type Error: std::error::Error + Send + Sync + 'static;
-
-    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, Self::Error>;
+    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError>;
 }
 
 pub trait WriteXml {
-    type Error: From<FromUtf8Error> + std::error::Error + Send + Sync + 'static;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error>;
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError>;
 }
 
 #[async_trait]
-pub trait ClientMsg: WriteXml + Debug
-where
-    Error: From<Self::Error>,
-{
-    fn to_xml(&self) -> Result<String, Self::Error> {
+pub trait ClientMsg: WriteXml + Debug {
+    fn to_xml(&self) -> Result<String, WriteError> {
         let mut buf = Vec::new();
         self.write_xml(&mut buf)?;
         buf.extend_from_slice(MARKER);
@@ -58,7 +54,7 @@ pub trait ServerMsg: ReadXml {
     const TAG_NAME: &'static str;
 
     #[tracing::instrument(skip(input))]
-    fn from_xml<S>(input: S) -> Result<Self, Error>
+    fn from_xml<S>(input: S) -> Result<Self, ReadError>
     where
         S: AsRef<str> + Debug,
     {
@@ -73,10 +69,7 @@ pub trait ServerMsg: ReadXml {
                     if ns == Self::TAG_NS
                         && tag.local_name().as_ref() == Self::TAG_NAME.as_bytes() =>
                 {
-                    this = Some(
-                        Self::read_xml(&mut reader, &tag)
-                            .map_err(|err| Error::ReadXml(err.into()))?,
-                    );
+                    this = Some(Self::read_xml(&mut reader, &tag)?);
                 }
                 (_, Event::Comment(_)) => continue,
                 (_, Event::Eof) => break,
@@ -85,17 +78,17 @@ pub trait ServerMsg: ReadXml {
                 // We should save the namespace in the error too.
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
-                    return Err(Error::UnexpectedXmlEvent(event.into_owned()));
+                    return Err(ReadError::UnexpectedXmlEvent(event.into_owned()));
                 }
             }
         }
-        this.ok_or_else(|| Error::MissingElement(Self::TAG_NAME, Self::TAG_NAME))
+        this.ok_or_else(|| ReadError::missing_element(Self::TAG_NAME, Self::TAG_NAME))
     }
 
     #[tracing::instrument(skip(receiver), err)]
     async fn recv<T: RecvHandle>(receiver: &mut T) -> Result<Self, Error> {
         let bytes = receiver.recv().await?;
-        let serialized = from_utf8(&bytes)?;
+        let serialized = from_utf8(&bytes).map_err(ReadError::DecodeMessage)?;
         Ok(Self::from_xml(serialized)?)
     }
 }

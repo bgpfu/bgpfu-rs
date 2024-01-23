@@ -3,7 +3,7 @@ use std::io::Write;
 use quick_xml::Writer;
 
 use super::{super::Empty, Operation, WriteXml};
-use crate::{capabilities::Requirements, session::Context, Error};
+use crate::{capabilities::Requirements, message::WriteError, session::Context, Error};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct CloseSession;
@@ -16,9 +16,7 @@ impl Operation for CloseSession {
 }
 
 impl WriteXml for CloseSession {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
         _ = Writer::new(writer)
             .create_element(Self::NAME)
             .write_empty()?;

@@ -2,7 +2,7 @@ use std::io::Write;
 
 use quick_xml::Writer;
 
-use crate::{capabilities::Requirements, session::Context, Error};
+use crate::{capabilities::Requirements, message::WriteError, session::Context, Error};
 
 use super::{params::Required, Datastore, Filter, Operation, Reply, WriteXml};
 
@@ -21,10 +21,8 @@ impl Operation for GetConfig {
 }
 
 impl WriteXml for GetConfig {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
-        _ = Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
+        Writer::new(writer)
             .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 _ = writer
@@ -33,9 +31,9 @@ impl WriteXml for GetConfig {
                 if let Some(ref filter) = self.filter {
                     filter.write_xml(writer.get_mut())?;
                 };
-                Ok::<_, Self::Error>(())
-            })?;
-        Ok(())
+                Ok(())
+            })
+            .map(|_| ())
     }
 }
 

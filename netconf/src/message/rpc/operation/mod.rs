@@ -5,12 +5,15 @@ use std::{
 };
 
 use iri_string::types::UriStr;
-use quick_xml::{events::BytesStart, NsReader, Writer};
+use quick_xml::{
+    events::{BytesStart, BytesText},
+    NsReader, Writer,
+};
 use uuid::Uuid;
 
 use crate::{
     capabilities::{Capability, Requirements},
-    message::{ReadXml, WriteXml},
+    message::{ReadError, ReadXml, WriteError, WriteXml},
     session::Context,
     Error,
 };
@@ -152,9 +155,7 @@ impl Datastore {
 }
 
 impl WriteXml for Datastore {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
         let mut writer = Writer::new(writer);
         _ = match self {
             Self::Running => writer.create_element("running").write_empty()?,
@@ -173,9 +174,7 @@ pub enum Source {
 }
 
 impl WriteXml for Source {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
         match self {
             Self::Datastore(datastore) => datastore.write_xml(writer)?,
             Self::Config(config) => {
@@ -185,7 +184,7 @@ impl WriteXml for Source {
                         writer
                             .get_mut()
                             .write_all(config.as_bytes())
-                            .map_err(|err| Error::RpcRequestSerialization(err.into()))
+                            .map_err(|err| WriteError::Other(err.into()))
                     })?;
             }
             Self::Url(url) => url.write_xml(writer)?,
@@ -225,9 +224,7 @@ impl Filter {
 }
 
 impl WriteXml for Filter {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
         let mut writer = Writer::new(writer);
         let elem = writer
             .create_element("filter")
@@ -237,7 +234,7 @@ impl WriteXml for Filter {
                 writer
                     .get_mut()
                     .write_all(filter.as_bytes())
-                    .map_err(|err| Error::RpcRequestSerialization(err.into()))
+                    .map_err(|err| WriteError::Other(err.into()))
             })?,
             Self::XPath(select) => elem
                 .with_attribute(("select", select.as_str()))
@@ -253,10 +250,8 @@ pub struct Reply {
 }
 
 impl ReadXml for Reply {
-    type Error = Error;
-
     #[tracing::instrument(skip(reader))]
-    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, Self::Error> {
+    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
         let inner = reader.read_text(end.name())?.into();
         Ok(Self { inner })
@@ -318,15 +313,10 @@ impl Display for Url {
 }
 
 impl WriteXml for Url {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
         _ = Writer::new(writer)
             .create_element("url")
-            .write_inner_content(|writer| {
-                write!(writer.get_mut(), "{self}")?;
-                Ok::<_, Error>(())
-            })?;
+            .write_text_content(BytesText::new(self.inner.as_str()))?;
         Ok(())
     }
 }

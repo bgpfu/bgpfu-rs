@@ -2,7 +2,12 @@ use std::io::Write;
 
 use quick_xml::Writer;
 
-use crate::{capabilities::Requirements, message::rpc::Empty, session::Context, Error};
+use crate::{
+    capabilities::Requirements,
+    message::{rpc::Empty, WriteError},
+    session::Context,
+    Error,
+};
 
 use super::{params::Required, Datastore, Operation, WriteXml};
 
@@ -20,18 +25,16 @@ impl Operation for Lock {
 }
 
 impl WriteXml for Lock {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
-        _ = Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
+        Writer::new(writer)
             .create_element(Self::NAME)
             .write_inner_content(|writer| {
-                _ = writer
+                writer
                     .create_element("target")
-                    .write_inner_content(|writer| self.target.write_xml(writer.get_mut()))?;
-                Ok::<_, Self::Error>(())
-            })?;
-        Ok(())
+                    .write_inner_content(|writer| self.target.write_xml(writer.get_mut()))
+                    .map(|_| ())
+            })
+            .map(|_| ())
     }
 }
 
@@ -49,18 +52,16 @@ impl Operation for Unlock {
 }
 
 impl WriteXml for Unlock {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
-        _ = Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
+        Writer::new(writer)
             .create_element(Self::NAME)
             .write_inner_content(|writer| {
-                _ = writer
+                writer
                     .create_element("target")
-                    .write_inner_content(|writer| self.target.write_xml(writer.get_mut()))?;
-                Ok::<_, Self::Error>(())
-            })?;
-        Ok(())
+                    .write_inner_content(|writer| self.target.write_xml(writer.get_mut()))
+                    .map(|_| ())
+            })
+            .map(|_| ())
     }
 }
 

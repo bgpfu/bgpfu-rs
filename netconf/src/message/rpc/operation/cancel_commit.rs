@@ -4,7 +4,7 @@ use quick_xml::{events::BytesText, Writer};
 
 use crate::{
     capabilities::{Capability, Requirements},
-    message::rpc::Empty,
+    message::{rpc::Empty, WriteError},
     session::Context,
     Error,
 };
@@ -25,17 +25,15 @@ impl Operation for CancelCommit {
 }
 
 impl WriteXml for CancelCommit {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
         let mut writer = Writer::new(writer);
         let elem = writer.create_element("cancel-commit");
         if let Some(ref token) = self.persist_id {
             _ = elem.write_inner_content(|writer| {
-                _ = writer
+                writer
                     .create_element("persist-id")
-                    .write_text_content(BytesText::new(&token.to_string()))?;
-                Ok::<_, Error>(())
+                    .write_text_content(BytesText::new(&token.to_string()))
+                    .map(|_| ())
             })?;
         } else {
             _ = elem.write_empty()?;

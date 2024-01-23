@@ -18,7 +18,7 @@ use crate::{
             self,
             operation::{Builder, CloseSession, ReplyData},
         },
-        ClientHello, ClientMsg, ServerHello, ServerMsg,
+        ClientHello, ClientMsg, ReadError, ServerHello, ServerMsg,
     },
     transport::{Password, Ssh, Tls, Transport},
     Error,
@@ -35,10 +35,10 @@ impl SessionId {
 }
 
 impl FromStr for SessionId {
-    type Err = Error;
+    type Err = ReadError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.parse()?))
+        Ok(Self(s.parse().map_err(Self::Err::SessionIdParse)?))
     }
 }
 

@@ -4,7 +4,7 @@ use quick_xml::Writer;
 
 use crate::{
     capabilities::{Capability, Requirements},
-    message::rpc::Empty,
+    message::{rpc::Empty, WriteError},
     session::Context,
     Error,
 };
@@ -26,18 +26,16 @@ impl Operation for Validate {
 }
 
 impl WriteXml for Validate {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
-        _ = Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
+        Writer::new(writer)
             .create_element(Self::NAME)
             .write_inner_content(|writer| {
-                _ = writer
+                writer
                     .create_element("source")
-                    .write_inner_content(|writer| self.source.write_xml(writer.get_mut()))?;
-                Ok::<_, Self::Error>(())
-            })?;
-        Ok(())
+                    .write_inner_content(|writer| self.source.write_xml(writer.get_mut()))
+                    .map(|_| ())
+            })
+            .map(|_| ())
     }
 }
 

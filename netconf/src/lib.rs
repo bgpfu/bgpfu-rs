@@ -43,7 +43,6 @@
 // docs.rs build config
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
-#[allow(missing_docs, clippy::missing_errors_doc)]
 mod error;
 pub use self::error::Error;
 
@@ -57,7 +56,6 @@ pub mod transport;
 mod session;
 pub use self::session::Session;
 
-#[allow(missing_docs, clippy::missing_errors_doc)]
 mod capabilities;
 
 // silence unused dev-dependency warnings

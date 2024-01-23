@@ -11,7 +11,7 @@ use quick_xml::{
     NsReader,
 };
 
-use crate::session::SessionId;
+use crate::{message::ReadError, session::SessionId};
 
 use super::{xmlns, ReadXml};
 
@@ -58,10 +58,8 @@ pub struct Error {
 }
 
 impl ReadXml for Error {
-    type Error = crate::Error;
-
     #[tracing::instrument(skip(reader))]
-    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, Self::Error> {
+    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
         let mut error_type = None;
         let mut error_tag = None;
@@ -150,17 +148,17 @@ impl ReadXml for Error {
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
-                    return Err(crate::Error::UnexpectedXmlEvent(event.into_owned()));
+                    return Err(ReadError::UnexpectedXmlEvent(event.into_owned()));
                 }
             }
         }
         Ok(Self {
             error_type: error_type
-                .ok_or_else(|| crate::Error::MissingElement("rpc-error", "<error-type>"))?,
+                .ok_or_else(|| ReadError::missing_element("rpc-error", "error-type"))?,
             error_tag: error_tag
-                .ok_or_else(|| crate::Error::MissingElement("rpc-error", "<error-tag>"))?,
+                .ok_or_else(|| ReadError::missing_element("rpc-error", "error-tag"))?,
             severity: severity
-                .ok_or_else(|| crate::Error::MissingElement("rpc-error", "<error-severity>"))?,
+                .ok_or_else(|| ReadError::missing_element("rpc-error", "error-severity"))?,
             app_tag,
             path,
             message,
@@ -190,7 +188,7 @@ pub enum Type {
 }
 
 impl FromStr for Type {
-    type Err = crate::Error;
+    type Err = ReadError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -242,7 +240,7 @@ pub enum Tag {
 }
 
 impl FromStr for Tag {
-    type Err = crate::Error;
+    type Err = ReadError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -306,7 +304,7 @@ pub enum Severity {
 }
 
 impl FromStr for Severity {
-    type Err = crate::Error;
+    type Err = ReadError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -383,10 +381,8 @@ impl Info {
 }
 
 impl ReadXml for Info {
-    type Error = crate::Error;
-
     #[tracing::instrument(skip(reader))]
-    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, Self::Error> {
+    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
         let mut inner = Vec::new();
         tracing::debug!("expecting error-info element");
@@ -408,7 +404,8 @@ impl ReadXml for Info {
                                 .read_text(tag.to_end().name())?
                                 .as_ref()
                                 .parse()
-                                .map(SessionId::new)?,
+                                .map(SessionId::new)
+                                .map_err(ReadError::SessionIdParse)?,
                         )),
                         b"ok-element" => inner.push(InfoElement::OkElement(
                             reader.read_text(tag.to_end().name())?.as_ref().into(),
@@ -420,7 +417,7 @@ impl ReadXml for Info {
                             reader.read_text(tag.to_end().name())?.as_ref().into(),
                         )),
                         name => {
-                            return Err(Self::Error::UnknownErrorInfo(from_utf8(name)?.to_string()))
+                            return Err(ReadError::UnknownErrorInfo(from_utf8(name)?.to_string()))
                         }
                     }
                 }
@@ -428,7 +425,7 @@ impl ReadXml for Info {
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
-                    return Err(crate::Error::UnexpectedXmlEvent(event.into_owned()));
+                    return Err(ReadError::UnexpectedXmlEvent(event.into_owned()));
                 }
             }
         }
@@ -458,7 +455,7 @@ mod tests {
         capabilities::Requirements,
         message::{
             rpc::{operation, Empty, MessageId, Operation, PartialReply, Reply, ReplyInner},
-            ServerMsg, WriteXml,
+            ServerMsg, WriteError, WriteXml,
         },
     };
 
@@ -473,8 +470,7 @@ mod tests {
     }
 
     impl WriteXml for Dummy {
-        type Error = crate::Error;
-        fn write_xml<W: Write>(&self, _: &mut W) -> Result<(), Self::Error> {
+        fn write_xml<W: Write>(&self, _: &mut W) -> Result<(), WriteError> {
             Ok(())
         }
     }

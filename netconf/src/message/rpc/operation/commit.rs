@@ -4,7 +4,7 @@ use quick_xml::{events::BytesText, Writer};
 
 use crate::{
     capabilities::{Capability, Requirements},
-    message::rpc::Empty,
+    message::{rpc::Empty, WriteError},
     session::Context,
     Error,
 };
@@ -28,40 +28,39 @@ impl Operation for Commit {
 }
 
 impl WriteXml for Commit {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
         let mut writer = Writer::new(writer);
         let elem = writer.create_element("commit");
         if self.confirmed {
-            _ = elem.write_inner_content(|writer| {
+            elem.write_inner_content(|writer| {
                 _ = writer.create_element("confirmed").write_empty()?;
                 if self.confirm_timeout != Timeout::default() {
                     _ = writer
                         .create_element("confirm-timeout")
-                        .write_inner_content(|writer| {
-                            write!(writer.get_mut(), "{}", self.confirm_timeout.0.as_secs())?;
-                            Ok::<_, Error>(())
-                        })?;
+                        .write_text_content(BytesText::new(
+                            &self.confirm_timeout.0.as_secs().to_string(),
+                        ))?;
                 };
                 if let Some(ref token) = self.persist {
                     _ = writer
                         .create_element("persist")
                         .write_text_content(BytesText::new(&token.to_string()))?;
                 }
-                Ok::<_, Error>(())
-            })?;
+                Ok(())
+            })
+            .map(|_| ())
         } else if let Some(ref token) = self.persist_id {
-            _ = elem.write_inner_content(|writer| {
+            elem.write_inner_content(|writer| {
                 _ = writer
                     .create_element("persist-id")
                     .write_text_content(BytesText::new(&token.to_string()))?;
-                Ok::<_, Error>(())
-            })?;
+                Ok(())
+            })
+            .map(|_| ())
         } else {
             _ = elem.write_empty()?;
-        };
-        Ok(())
+            Ok(())
+        }
     }
 }
 

@@ -9,10 +9,9 @@ use quick_xml::{
 use crate::{
     capabilities::{Capabilities, Capability},
     session::SessionId,
-    Error,
 };
 
-use super::{xmlns, ClientMsg, ReadXml, ServerMsg, WriteXml};
+use super::{xmlns, ClientMsg, ReadError, ReadXml, ServerMsg, WriteError, WriteXml};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ServerHello {
@@ -31,10 +30,8 @@ impl ServerHello {
 }
 
 impl ReadXml for ServerHello {
-    type Error = Error;
-
     #[tracing::instrument(skip(reader))]
-    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, Self::Error> {
+    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
         let (mut capabilities, mut session_id) = (None, None);
         tracing::debug!("expecting <capabilities> or <session-id>");
@@ -62,14 +59,15 @@ impl ReadXml for ServerHello {
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
-                    return Err(Error::UnexpectedXmlEvent(event.into_owned()));
+                    return Err(ReadError::UnexpectedXmlEvent(event.into_owned()));
                 }
             };
         }
         Ok(Self {
             capabilities: capabilities
-                .ok_or_else(|| Error::MissingElement("hello", "<capabilities>"))?,
-            session_id: session_id.ok_or_else(|| Error::MissingElement("hello", "<session-id>"))?,
+                .ok_or_else(|| ReadError::missing_element("hello", "capabilities"))?,
+            session_id: session_id
+                .ok_or_else(|| ReadError::missing_element("hello", "session-id"))?,
         })
     }
 }
@@ -96,29 +94,10 @@ impl ClientHello {
     pub(crate) fn capabilities(self) -> Capabilities {
         self.capabilities
     }
-
-    // pub(crate) fn common_capabilities(
-    //     &self,
-    //     server_hello: &ServerHello,
-    // ) -> Result<Capabilities, Error> {
-    //     let common = self
-    //         .capabilities
-    //         .inner
-    //         .intersection(&server_hello.capabilities.inner)
-    //         .cloned()
-    //         .collect::<Capabilities>();
-    //     if common.contains(&BASE) {
-    //         Ok(common)
-    //     } else {
-    //         Err(Error::BaseCapability)
-    //     }
-    // }
 }
 
 impl WriteXml for ClientHello {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
         _ = Writer::new(writer)
             .create_element("hello")
             .write_inner_content(|writer| self.capabilities.write_xml(writer.get_mut()))?;

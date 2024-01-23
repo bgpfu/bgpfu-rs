@@ -4,7 +4,7 @@ use quick_xml::Writer;
 
 use crate::{
     capabilities::{Capability, Requirements},
-    message::rpc::Empty,
+    message::{rpc::Empty, WriteError},
     session::Context,
     Error,
 };
@@ -26,9 +26,7 @@ impl Operation for DiscardChanges {
 }
 
 impl WriteXml for DiscardChanges {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
         _ = Writer::new(writer)
             .create_element("discard-changes")
             .write_empty()?;

@@ -147,10 +147,7 @@ pub struct Receiver {
 impl RecvHandle for Receiver {
     #[tracing::instrument(level = "trace")]
     async fn recv(&mut self) -> Result<Bytes, Error> {
-        self.inner
-            .recv()
-            .await
-            .ok_or(Error::DequeueMessage("input message channel closed"))
+        self.inner.recv().await.ok_or(Error::DequeueMessage)
     }
 }
 

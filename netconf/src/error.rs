@@ -4,138 +4,159 @@ use tokio::sync::mpsc;
 
 use crate::{
     capabilities::Requirements,
-    message::rpc::{self, operation::Datastore},
+    message::{
+        self,
+        rpc::{self, operation::Datastore},
+    },
 };
 
-/// `netconf` Error variants
+/// `netconf` library error variants
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    // Transport //
+    //
+    /// The underlying SSH transport encountered an error.
     #[error(transparent)]
     SshTransport(#[from] russh::Error),
 
+    /// The underlying TLS transport encountered an error.
     #[error(transparent)]
     TlsTransport(#[from] tokio_rustls::rustls::Error),
 
-    #[error("authentication failed for user {0}")]
-    Authentication(String),
-
+    /// The underlying transport encountered an error.
     #[error("a transport error occurred: {0}")]
     Transport(#[from] std::io::Error),
 
-    #[error("failed to negotiate a common base protocol version")]
-    VersionNegotiation,
-
-    #[error("missing required parameter {1} for rpc operation {0}")]
-    MissingOperationParameter(&'static str, &'static str),
-
+    /// Failure to enqueue an inter-task message.
     #[error("failed to enqueue a message")]
     EnqueueMessage(#[from] mpsc::error::SendError<Bytes>),
 
-    #[error("failed to dequeue a message: {0}")]
-    DequeueMessage(&'static str),
+    /// Failure to dequeue an inter-task message.
+    #[error("failed to dequeue a message: send side is closed")]
+    DequeueMessage,
 
-    #[error("failed to utf-8 encode message")]
-    EncodeMessage(#[from] std::string::FromUtf8Error),
-
-    #[error("failed to decode utf-8")]
-    DecodeMessage(#[from] std::str::Utf8Error),
-
-    #[error("failed to parse xml document: {0:?}")]
-    XmlParse(#[from] quick_xml::Error),
-
-    #[error("error while reading xml")]
-    ReadXml(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
-
-    #[error("unexpected event while parsing xml: {0:?}")]
-    UnexpectedXmlEvent(quick_xml::events::Event<'static>),
-
-    #[error("missing '{1}' element while parsing '{0}' message")]
-    MissingElement(&'static str, &'static str),
-
-    #[error("message-id attribute missing in rpc-reply")]
-    NoMessageId,
-
-    #[error("message-id mis-match between parse phases. please file a bug report!")]
-    MessageIdMismatch(rpc::MessageId, rpc::MessageId),
-
-    #[error("failed to parse message-id")]
-    MessageIdParse(#[from] std::num::ParseIntError),
-
-    #[error("failed to parse capability URI")]
-    ParseCapability(#[from] iri_string::validate::Error),
-
-    #[error("missing common mandatory capabilities")]
-    BaseCapability,
-
-    #[error("encountered a 'message-id' collision. please file a bug report!")]
-    MessageIdCollision(rpc::MessageId),
-
-    #[error("request with message-id '{0:?}' not found")]
-    RequestNotFound(rpc::MessageId),
-
-    #[error("attempted to poll for an already completed request")]
-    RequestComplete,
-
-    #[error("failed to serialize rpc request")]
-    RpcRequestSerialization(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
-
-    #[error("failed to deserialize rpc-reply data")]
-    RpcReplyDeserialization(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
-
-    #[error("received rpc-error reply: {0}")]
-    RpcError(#[from] rpc::Errors),
-
-    #[error("encountered an unknown rpc-error error-type: {0}")]
-    UnknownErrorType(String),
-
-    #[error("encountered an unknown rpc-error error-tag: {0}")]
-    UnknownErrorTag(String),
-
-    #[error("encountered an unknown rpc-error error-severity: {0}")]
-    UnknownErrorSeverity(String),
-
-    #[error("encountered an unknown rpc-error error-info type: {0}")]
-    UnknownErrorInfo(String),
-
+    /// Invalid DNS name for certificate validation.
     #[error(transparent)]
     InvalidDnsName(#[from] rustls_pki_types::InvalidDnsNameError),
 
-    #[error("unexpected empty rpc-reply")]
-    EmptyRpcReply,
+    // Session establishment //
+    //
+    /// User authentication failed.
+    #[error("authentication failed for user {0}")]
+    Authentication(String),
 
-    #[error("deleting the <running> datastore is not permitted")]
+    /// Base protocol version negotiation failed.
+    #[error("failed to negotiate a common base protocol version")]
+    VersionNegotiation,
+
+    // Session management //
+    //
+    /// A `message-id` collision was detected.
+    #[error("encountered a 'message-id' collision. please file a bug report!")]
+    MessageIdCollision(rpc::MessageId),
+
+    /// Received a message with an unknown `message-id`.
+    #[error("request with message-id '{0:?}' not found")]
+    RequestNotFound(rpc::MessageId),
+
+    /// Attempted to process an already completed request.
+    #[error("attempted to poll for an already completed request")]
+    RequestComplete,
+
+    // Message encoding / serialization //
+    //
+    /// Message serialization failed.
+    #[error(transparent)]
+    WriteMessage(#[from] message::WriteError),
+
+    // Message decoding / de-serialization //
+    //
+    /// Message de-serialization failed
+    #[error(transparent)]
+    ReadMessage(#[from] message::ReadError),
+
+    // RPC request validation.
+    //
+    /// Attempted to perform `delete-config` operation targeting the `running` datastore.
+    #[error("deleting the <running/> datastore is not permitted")]
     DeleteRunningConfig,
 
+    /// Invalid `session-id`.
     #[error("invalid session-id: {0}")]
     InvalidSessionId(u32),
 
+    /// Attempted to perform `kill-session` operation targeting the current session.
     #[error("kill-session operation targeting the current session is not permitted")]
     KillCurrentSession,
 
+    /// Attempted to perform an unsupported operation.
     #[error("unsupported rpc operation '{0}' (requires {1})")]
     UnsupportedOperation(&'static str, Requirements),
 
+    /// Attempted to set an unsupported operation parameter.
     #[error("unsupported parameter '{1}' for rpc operation '{0}' (requires {2})")]
     UnsupportedOperationParameter(&'static str, &'static str, Requirements),
 
+    /// Attempted to set an operation parameter to an unsupported value.
     #[error("unsupported value '{2}' of parameter '{1}' for rpc operation '{0}' (requires {3})")]
     UnsupportedOperParameterValue(&'static str, &'static str, &'static str, Requirements),
 
+    /// Attempted to perform an operation on an unsupported `source` datastore.
     #[error("unsupported source datastore '{0:?}' (requires {1})")]
     UnsupportedSource(Datastore, Requirements),
 
+    /// Attempted to perform an operation on an unsupported `target` datastore.
     #[error("unsupported target datastore '{0:?}' (requires {1})")]
     UnsupportedTarget(Datastore, Requirements),
 
+    /// Attempted to `lock` an unsupported datastore.
     #[error("unsupported lock target datastore '{0:?}' (requires {1})")]
     UnsupportedLockTarget(Datastore, Requirements),
 
+    /// Unsupported URL scheme.
     #[error("unsupported scheme in url '{0}' (requires ':url:1.0' capability with corresponding 'scheme' parameter)")]
     UnsupportedUrlScheme(Box<UriStr>),
 
+    /// Unsupported `filter` type.
     #[error("unsupported filter type '{0}' (requires {1})")]
     UnsupportedFilterType(&'static str, Requirements),
 
+    /// Missing a required operation parameter.
+    #[error("missing required parameter {param_name} for rpc operation {operation_name}")]
+    MissingOperationParameter {
+        /// RPC operation name.
+        operation_name: &'static str,
+        /// Required parameter name.
+        param_name: &'static str,
+    },
+
+    /// Incompatible combination of operation parameters.
     #[error("incompatible parameter combination for operation '{0}': {}", .1.join(", "))]
     IncompatibleOperationParameters(&'static str, Vec<&'static str>),
+
+    /// Failed to parse a URL
+    #[error("failed to parse URI")]
+    UrlParse(#[from] iri_string::validate::Error),
+
+    // Protocol errors
+    //
+    /// RPC operation failure.
+    #[error("received rpc-error reply: {0}")]
+    RpcError(#[from] rpc::Errors),
+
+    /// Empty `rpc-reply` when data was expected.
+    #[error("unexpectedly empty rpc-reply")]
+    EmptyRpcReply,
+}
+
+impl Error {
+    pub(crate) const fn missing_operation_parameter(
+        operation_name: &'static str,
+        param_name: &'static str,
+    ) -> Self {
+        Self::MissingOperationParameter {
+            operation_name,
+            param_name,
+        }
+    }
 }

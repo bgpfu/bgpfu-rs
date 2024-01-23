@@ -23,6 +23,6 @@ impl<T> Required<T> {
         O: Operation,
     {
         self.value
-            .ok_or_else(|| Error::MissingOperationParameter(O::NAME, param_name))
+            .ok_or_else(|| Error::missing_operation_parameter(O::NAME, param_name))
     }
 }

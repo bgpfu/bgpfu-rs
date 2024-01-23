@@ -1,10 +1,10 @@
 use std::io::Write;
 
-use quick_xml::Writer;
+use quick_xml::{events::BytesText, Writer};
 
 use crate::{
     capabilities::{Capability, Requirements},
-    message::rpc::Empty,
+    message::{rpc::Empty, WriteError},
     session::Context,
     Error,
 };
@@ -28,10 +28,8 @@ impl Operation for EditConfig {
 }
 
 impl WriteXml for EditConfig {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
-        _ = Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
+        Writer::new(writer)
             .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 _ = writer
@@ -40,31 +38,22 @@ impl WriteXml for EditConfig {
                 if self.default_operation.is_non_default() {
                     _ = writer
                         .create_element("default-operation")
-                        .write_inner_content(|writer| {
-                            write!(writer.get_mut(), "{}", self.default_operation.as_str())?;
-                            Ok::<_, Error>(())
-                        })?;
+                        .write_text_content(BytesText::new(self.default_operation.as_str()))?;
                 };
                 if self.error_option.is_non_default() {
                     _ = writer
                         .create_element("error-option")
-                        .write_inner_content(|writer| {
-                            write!(writer.get_mut(), "{}", self.error_option.as_str())?;
-                            Ok::<_, Error>(())
-                        })?;
+                        .write_text_content(BytesText::new(self.error_option.as_str()))?;
                 };
                 if self.test_option.is_non_default() {
                     _ = writer
                         .create_element("test-option")
-                        .write_inner_content(|writer| {
-                            write!(writer.get_mut(), "{}", self.test_option.as_str())?;
-                            Ok::<_, Error>(())
-                        })?;
+                        .write_text_content(BytesText::new(self.test_option.as_str()))?;
                 };
                 self.source.write_xml(writer.get_mut())?;
-                Ok::<_, Self::Error>(())
-            })?;
-        Ok(())
+                Ok(())
+            })
+            .map(|_| ())
     }
 }
 
@@ -149,21 +138,38 @@ pub enum Source {
 }
 
 impl WriteXml for Source {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
         match self {
-            Self::Config(config) => {
-                _ = Writer::new(writer)
-                    .create_element("config")
-                    .write_inner_content(|writer| {
-                        write!(writer.get_mut(), "{config}")?;
-                        Ok::<_, Error>(())
-                    })?;
-                Ok(())
-            }
+            Self::Config(config) => Writer::new(writer)
+                .create_element("config")
+                .write_inner_content(|writer| {
+                    writer
+                        .get_mut()
+                        .write_all(config.as_bytes())
+                        .map_err(|err| WriteError::Other(err.into()))
+                })
+                .map(|_| ()),
             Self::Url(url) => url.write_xml(writer),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Config {
+    inner: String,
+}
+
+impl WriteXml for Config {
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
+        Writer::new(writer)
+            .create_element("config")
+            .write_inner_content(|writer| {
+                writer
+                    .get_mut()
+                    .write_all(self.inner.as_bytes())
+                    .map_err(|err| WriteError::Other(err.into()))
+            })
+            .map(|_| ())
     }
 }
 

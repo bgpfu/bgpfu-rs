@@ -15,7 +15,7 @@ use quick_xml::{
 };
 
 use crate::{
-    message::{xmlns, ReadXml, WriteXml},
+    message::{xmlns, ReadError, ReadXml, WriteError, WriteXml},
     Error,
 };
 
@@ -34,11 +34,6 @@ impl Capabilities {
         self.inner.contains(elem)
     }
 
-    // #[tracing::instrument(ret, level = "debug")]
-    // pub fn contains_any(&self, elems: &[&Capability]) -> bool {
-    //     elems.iter().any(|elem| self.contains(elem))
-    // }
-    //
     #[tracing::instrument(ret, level = "debug")]
     pub(crate) fn highest_common_version(&self, other: &Self) -> Result<Base, Error> {
         self.inner
@@ -58,10 +53,8 @@ impl Capabilities {
 }
 
 impl ReadXml for Capabilities {
-    type Error = Error;
-
     #[tracing::instrument(skip(reader))]
-    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, Self::Error> {
+    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let mut inner = HashSet::new();
         let end = start.to_end();
         loop {
@@ -75,7 +68,7 @@ impl ReadXml for Capabilities {
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
-                    return Err(Error::UnexpectedXmlEvent(event.into_owned()));
+                    return Err(ReadError::UnexpectedXmlEvent(event.into_owned()));
                 }
             }
         }
@@ -84,9 +77,7 @@ impl ReadXml for Capabilities {
 }
 
 impl WriteXml for Capabilities {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
         _ = Writer::new(writer)
             .create_element("capabilities")
             .write_inner_content(|writer| {
@@ -129,7 +120,7 @@ pub enum Capability {
 }
 
 impl FromStr for Capability {
-    type Err = Error;
+    type Err = ReadError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let uri = UriStr::new(s)?;
@@ -226,9 +217,7 @@ impl Capability {
 }
 
 impl WriteXml for Capability {
-    type Error = Error;
-
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
+    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
         _ = Writer::new(writer)
             .create_element("capability")
             .write_text_content(BytesText::new(&self.uri()))?;
