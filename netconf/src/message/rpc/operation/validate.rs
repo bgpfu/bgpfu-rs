@@ -26,13 +26,13 @@ impl Operation for Validate {
 }
 
 impl WriteXml for Validate {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        writer
             .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 writer
                     .create_element("source")
-                    .write_inner_content(|writer| self.source.write_xml(writer.get_mut()))
+                    .write_inner_content(|writer| self.source.write_xml(writer))
                     .map(|_| ())
             })
             .map(|_| ())

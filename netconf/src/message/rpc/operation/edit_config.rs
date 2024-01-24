@@ -28,13 +28,13 @@ impl Operation for EditConfig {
 }
 
 impl WriteXml for EditConfig {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        writer
             .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 _ = writer
                     .create_element("target")
-                    .write_inner_content(|writer| self.target.write_xml(writer.get_mut()))?;
+                    .write_inner_content(|writer| self.target.write_xml(writer))?;
                 if self.default_operation.is_non_default() {
                     _ = writer
                         .create_element("default-operation")
@@ -50,7 +50,7 @@ impl WriteXml for EditConfig {
                         .create_element("test-option")
                         .write_text_content(BytesText::new(self.test_option.as_str()))?;
                 };
-                self.source.write_xml(writer.get_mut())?;
+                self.source.write_xml(writer)?;
                 Ok(())
             })
             .map(|_| ())
@@ -138,9 +138,9 @@ pub enum Source {
 }
 
 impl WriteXml for Source {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
         match self {
-            Self::Config(config) => Writer::new(writer)
+            Self::Config(config) => writer
                 .create_element("config")
                 .write_inner_content(|writer| {
                     writer
@@ -160,8 +160,8 @@ pub struct Config {
 }
 
 impl WriteXml for Config {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        writer
             .create_element("config")
             .write_inner_content(|writer| {
                 writer

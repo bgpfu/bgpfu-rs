@@ -28,8 +28,7 @@ impl Operation for Commit {
 }
 
 impl WriteXml for Commit {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        let mut writer = Writer::new(writer);
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
         let elem = writer.create_element("commit");
         if self.confirmed {
             elem.write_inner_content(|writer| {

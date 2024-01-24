@@ -16,10 +16,8 @@ impl Operation for CloseSession {
 }
 
 impl WriteXml for CloseSession {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        _ = Writer::new(writer)
-            .create_element(Self::NAME)
-            .write_empty()?;
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        _ = writer.create_element(Self::NAME).write_empty()?;
         Ok(())
     }
 }

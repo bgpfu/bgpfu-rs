@@ -20,12 +20,12 @@ impl Operation for Get {
 }
 
 impl WriteXml for Get {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        writer
             .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 if let Some(ref filter) = self.filter {
-                    filter.write_xml(writer.get_mut())?;
+                    filter.write_xml(writer)?;
                 };
                 Ok(())
             })

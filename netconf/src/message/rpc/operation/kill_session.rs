@@ -25,8 +25,8 @@ impl Operation for KillSession {
 }
 
 impl WriteXml for KillSession {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        writer
             .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 _ = writer

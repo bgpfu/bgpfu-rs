@@ -97,10 +97,10 @@ impl ClientHello {
 }
 
 impl WriteXml for ClientHello {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        _ = Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        _ = writer
             .create_element("hello")
-            .write_inner_content(|writer| self.capabilities.write_xml(writer.get_mut()))?;
+            .write_inner_content(|writer| self.capabilities.write_xml(writer))?;
         Ok(())
     }
 }

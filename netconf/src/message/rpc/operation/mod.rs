@@ -152,16 +152,19 @@ impl Datastore {
             Err(Error::UnsupportedLockTarget(self, required_capabilities))
         }
     }
+
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Running => "running",
+            Self::Candidate => "candidate",
+            Self::Startup => "startup",
+        }
+    }
 }
 
 impl WriteXml for Datastore {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        let mut writer = Writer::new(writer);
-        _ = match self {
-            Self::Running => writer.create_element("running").write_empty()?,
-            Self::Candidate => writer.create_element("candidate").write_empty()?,
-            Self::Startup => writer.create_element("startup").write_empty()?,
-        };
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        _ = writer.create_element(self.as_str()).write_empty()?;
         Ok(())
     }
 }
@@ -174,11 +177,11 @@ pub enum Source {
 }
 
 impl WriteXml for Source {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
         match self {
             Self::Datastore(datastore) => datastore.write_xml(writer)?,
             Self::Config(config) => {
-                _ = Writer::new(writer)
+                _ = writer
                     .create_element("config")
                     .write_inner_content(|writer| {
                         writer
@@ -224,8 +227,7 @@ impl Filter {
 }
 
 impl WriteXml for Filter {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        let mut writer = Writer::new(writer);
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
         let elem = writer
             .create_element("filter")
             .with_attribute(("type", self.as_str()));
@@ -313,8 +315,8 @@ impl Display for Url {
 }
 
 impl WriteXml for Url {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        _ = Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        _ = writer
             .create_element("url")
             .write_text_content(BytesText::new(self.inner.as_str()))?;
         Ok(())

@@ -21,15 +21,15 @@ impl Operation for GetConfig {
 }
 
 impl WriteXml for GetConfig {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        writer
             .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 _ = writer
                     .create_element("source")
-                    .write_inner_content(|writer| self.source.write_xml(writer.get_mut()))?;
+                    .write_inner_content(|writer| self.source.write_xml(writer))?;
                 if let Some(ref filter) = self.filter {
-                    filter.write_xml(writer.get_mut())?;
+                    filter.write_xml(writer)?;
                 };
                 Ok(())
             })

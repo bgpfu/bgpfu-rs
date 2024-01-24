@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use quick_xml::{
     events::{BytesStart, Event},
     name::{Namespace, ResolveResult},
-    NsReader,
+    NsReader, Writer,
 };
 
 use crate::{
@@ -29,14 +29,15 @@ pub trait ReadXml: Sized {
 }
 
 pub trait WriteXml {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError>;
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError>;
 }
 
 #[async_trait]
 pub trait ClientMsg: WriteXml + Debug {
     fn to_xml(&self) -> Result<String, WriteError> {
         let mut buf = Vec::new();
-        self.write_xml(&mut buf)?;
+        let mut writer = Writer::new(&mut buf);
+        self.write_xml(&mut writer)?;
         buf.extend_from_slice(MARKER);
         Ok(String::from_utf8(buf)?)
     }

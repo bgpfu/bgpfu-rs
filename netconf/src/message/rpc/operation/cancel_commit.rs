@@ -25,8 +25,7 @@ impl Operation for CancelCommit {
 }
 
 impl WriteXml for CancelCommit {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        let mut writer = Writer::new(writer);
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
         let elem = writer.create_element("cancel-commit");
         if let Some(ref token) = self.persist_id {
             _ = elem.write_inner_content(|writer| {

@@ -25,13 +25,13 @@ impl Operation for Lock {
 }
 
 impl WriteXml for Lock {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        writer
             .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 writer
                     .create_element("target")
-                    .write_inner_content(|writer| self.target.write_xml(writer.get_mut()))
+                    .write_inner_content(|writer| self.target.write_xml(writer))
                     .map(|_| ())
             })
             .map(|_| ())
@@ -52,13 +52,13 @@ impl Operation for Unlock {
 }
 
 impl WriteXml for Unlock {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        writer
             .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 writer
                     .create_element("target")
-                    .write_inner_content(|writer| self.target.write_xml(writer.get_mut()))
+                    .write_inner_content(|writer| self.target.write_xml(writer))
                     .map(|_| ())
             })
             .map(|_| ())

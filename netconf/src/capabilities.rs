@@ -77,13 +77,13 @@ impl ReadXml for Capabilities {
 }
 
 impl WriteXml for Capabilities {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        _ = Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        _ = writer
             .create_element("capabilities")
             .write_inner_content(|writer| {
                 self.inner
                     .iter()
-                    .try_for_each(|capability| capability.write_xml(writer.get_mut()))
+                    .try_for_each(|capability| capability.write_xml(writer))
             })?;
         Ok(())
     }
@@ -217,8 +217,8 @@ impl Capability {
 }
 
 impl WriteXml for Capability {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        _ = Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        _ = writer
             .create_element("capability")
             .write_text_content(BytesText::new(&self.uri()))?;
         Ok(())

@@ -55,11 +55,11 @@ impl<O: Operation> Request<O> {
 }
 
 impl<O: Operation> WriteXml for Request<O> {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        writer
             .create_element("rpc")
             .with_attribute(("message-id", self.message_id.0.to_string().as_ref()))
-            .write_inner_content(|writer| self.operation.write_xml(writer.get_mut()))
+            .write_inner_content(|writer| self.operation.write_xml(writer))
             .map(|_| ())
     }
 }
@@ -272,8 +272,8 @@ mod tests {
     }
 
     impl WriteXml for Foo {
-        fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-            _ = Writer::new(writer)
+        fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+            _ = writer
                 .create_element("foo")
                 .write_text_content(BytesText::new(self.foo))?;
             Ok(())
@@ -363,8 +363,8 @@ mod tests {
     struct Bar;
 
     impl WriteXml for Bar {
-        fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-            _ = Writer::new(writer).create_element("bar").write_empty()?;
+        fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+            _ = writer.create_element("bar").write_empty()?;
             Ok(())
         }
     }

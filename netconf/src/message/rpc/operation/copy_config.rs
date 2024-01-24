@@ -26,16 +26,16 @@ impl Operation for CopyConfig {
 }
 
 impl WriteXml for CopyConfig {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
-        Writer::new(writer)
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        writer
             .create_element(Self::NAME)
             .write_inner_content(|writer| {
                 _ = writer
                     .create_element("target")
-                    .write_inner_content(|writer| self.target.write_xml(writer.get_mut()))?;
+                    .write_inner_content(|writer| self.target.write_xml(writer))?;
                 _ = writer
                     .create_element("source")
-                    .write_inner_content(|writer| self.source.write_xml(writer.get_mut()))?;
+                    .write_inner_content(|writer| self.source.write_xml(writer))?;
                 Ok(())
             })
             .map(|_| ())
@@ -94,7 +94,7 @@ enum Target {
 }
 
 impl WriteXml for Target {
-    fn write_xml<W: Write>(&self, writer: &mut W) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
         match self {
             Self::Datastore(datastore) => datastore.write_xml(writer),
         }

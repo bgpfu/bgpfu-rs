@@ -450,6 +450,8 @@ pub enum InfoElement {
 mod tests {
     use std::io::Write;
 
+    use quick_xml::Writer;
+
     use super::*;
     use crate::{
         capabilities::Requirements,
@@ -470,7 +472,7 @@ mod tests {
     }
 
     impl WriteXml for Dummy {
-        fn write_xml<W: Write>(&self, _: &mut W) -> Result<(), WriteError> {
+        fn write_xml<W: Write>(&self, _: &mut Writer<W>) -> Result<(), WriteError> {
             Ok(())
         }
     }
