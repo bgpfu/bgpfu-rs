@@ -243,6 +243,7 @@ pub enum Empty {}
 
 impl ReadXml for Empty {
     fn read_xml(_: &mut NsReader<&[u8]>, _: &BytesStart<'_>) -> Result<Self, ReadError> {
+        // TODO: should this return `Result::Err(..)` instead?
         unreachable!()
     }
 }

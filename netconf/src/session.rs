@@ -194,8 +194,7 @@ impl<T: Transport> Session<T> {
         F: Fn(O::Builder<'_>) -> Result<O, Error> + Send,
     {
         let message_id = self.last_message_id.increment();
-        let request = O::Builder::new(&self.context)
-            .build(build_fn)
+        let request = O::new(&self.context, build_fn)
             .map(|operation| rpc::Request::new(message_id, operation))?;
         #[allow(clippy::significant_drop_in_scrutinee)]
         match self.requests.lock().await.entry(message_id) {
