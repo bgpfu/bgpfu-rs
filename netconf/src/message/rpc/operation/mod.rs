@@ -105,6 +105,9 @@ pub use self::validate::Validate;
 pub(crate) mod close_session;
 pub(crate) use self::close_session::CloseSession;
 
+#[cfg(feature = "junos")]
+pub mod junos;
+
 #[derive(Debug, Default, Copy, Clone)]
 pub enum Datastore {
     #[default]
