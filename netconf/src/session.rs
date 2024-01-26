@@ -24,6 +24,7 @@ use crate::{
     Error,
 };
 
+/// An identifier used by a NETCONF server to uniquely identify a session.
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SessionId(NonZeroU32);
@@ -48,6 +49,13 @@ impl Display for SessionId {
     }
 }
 
+/// A NETCONF client session over a secure transport `T`.
+///
+/// [`Session`] instances provide direct access to asynchronous NETCONF protocol operations. The
+/// library user is responsible for ensuring the correct ordering of operations to ensure, for
+/// example, safe config modification. See [RFC6241] for additional guidance.
+///
+/// [RFC6241]: https://datatracker.ietf.org/doc/html/rfc6241#appendix-E
 #[derive(Debug)]
 pub struct Session<T: Transport> {
     transport_tx: Arc<Mutex<T::SendHandle>>,
@@ -57,6 +65,7 @@ pub struct Session<T: Transport> {
     requests: Arc<Mutex<HashMap<rpc::MessageId, OutstandingRequest>>>,
 }
 
+/// NETCONF session state container.
 #[derive(Debug)]
 pub struct Context {
     session_id: SessionId,
@@ -80,19 +89,26 @@ impl Context {
         }
     }
 
+    /// The NETCONF `session-id` of the current session.
     #[must_use]
     pub const fn session_id(&self) -> SessionId {
         self.session_id
     }
 
+    /// The base NETCONF protocol version negotiated on the current session.
+    #[must_use]
     pub const fn protocol_version(&self) -> Base {
         self.protocol_version
     }
 
+    /// The set of NETCONF capabilities advertised by the client during `<hello>` message exchange.
+    #[must_use]
     pub const fn client_capabilities(&self) -> &Capabilities {
         &self.client_capabilities
     }
 
+    /// The set of NETCONF capabilities advertised by the client during `<hello>` message exchange.
+    #[must_use]
     pub const fn server_capabilities(&self) -> &Capabilities {
         &self.server_capabilities
     }
@@ -120,6 +136,7 @@ impl OutstandingRequest {
 }
 
 impl Session<Ssh> {
+    /// Establish a new NETCONF session over an SSH transport.
     #[tracing::instrument]
     pub async fn ssh<A>(addr: A, username: String, password: Password) -> Result<Self, Error>
     where
@@ -132,6 +149,7 @@ impl Session<Ssh> {
 }
 
 impl Session<Tls> {
+    /// Establish a new NETCONF session over a TLS transport.
     #[tracing::instrument]
     pub async fn tls<A, S>(
         addr: A,
@@ -178,11 +196,36 @@ impl<T: Transport> Session<T> {
         })
     }
 
+    /// Get the session state [`Context`] of this session.
     #[must_use]
     pub const fn context(&self) -> &Context {
         &self.context
     }
 
+    /// Execute a NETCONF RPC operation on the current session.
+    ///
+    /// See the [`rpc::operation`] module for available operations and their request builder APIs.
+    ///
+    /// RPC requests are built and validated against the [`Context`] of the current session - in
+    /// particular, against the list of capabilities advertised by the NETCONF server in the
+    /// `<hello>` message exchange.
+    ///
+    /// The `build_fn` closure must accept an instance of the operation request
+    /// [`Builder`][rpc::Operation::Builder], configure the builder, and then convert it to a
+    /// validated request by calling [`Builder::finish()`][rpc::operation::Builder::finish].
+    ///
+    /// This method returns a nested [`Future`], reflecting the fact that the request is sent to
+    /// the NETCONF server asynchronously and then the response is later received asynchronously.
+    ///
+    /// The `Output` of both the outer and inner `Future` are of type `Result`.
+    ///
+    /// An [`Err`] variant returned by awaiting the outer future indicates either a request validation
+    /// error or a session/transport error encountered while sending the RPC request.
+    ///
+    /// An [`Err`] variant returned by awaiting the inner future indicates either a
+    /// session/transport error while receiving the `<rpc-reply>` message, an error parsing the
+    /// received XML, or one-or-more application layer errors returned by the NETCONF server. The
+    /// latter case may be identified by matching on the [`Error::RpcError`] variant.
     #[tracing::instrument(skip(self, build_fn))]
     pub async fn rpc<O, F>(
         &mut self,
@@ -239,6 +282,7 @@ impl<T: Transport> Session<T> {
         Ok(fut)
     }
 
+    /// Close the NETCONF session gracefully using the `<close-session>` RPC operation.
     #[tracing::instrument(skip(self))]
     pub async fn close(mut self) -> Result<impl Future<Output = Result<(), Error>>, Error> {
         self.rpc::<CloseSession, _>(Builder::finish)

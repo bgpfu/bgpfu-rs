@@ -10,6 +10,7 @@ use crate::{
     },
 };
 
+// TODO: name non-source fields
 /// `netconf` library error variants
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

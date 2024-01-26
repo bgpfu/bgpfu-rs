@@ -9,7 +9,7 @@ pub enum Read {
     #[error("failed to decode utf-8")]
     DecodeMessage(#[from] std::str::Utf8Error),
 
-    /// Failed to parse a [`MessageId`].
+    /// Failed to parse a [`MessageId`][rpc::MessageId].
     #[error("failed to parse message-id")]
     MessageIdParse(#[source] std::num::ParseIntError),
 

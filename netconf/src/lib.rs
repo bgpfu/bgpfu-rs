@@ -52,8 +52,9 @@ pub mod message;
 #[allow(missing_docs, clippy::missing_errors_doc)]
 pub mod transport;
 
-#[allow(missing_docs, clippy::missing_errors_doc)]
-mod session;
+/// NETCONF session management
+pub mod session;
+#[doc(inline)]
 pub use self::session::Session;
 
 mod capabilities;
