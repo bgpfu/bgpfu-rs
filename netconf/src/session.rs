@@ -12,7 +12,7 @@ use rustls_pki_types::{CertificateDer, InvalidDnsNameError, PrivateKeyDer, Serve
 use tokio::{net::ToSocketAddrs, sync::Mutex};
 
 use crate::{
-    capabilities::{Base, Capabilities, Capability},
+    capabilities::{Base, Capabilities},
     message::{
         rpc::{
             self,
@@ -170,7 +170,7 @@ impl Session<Tls> {
 
 impl<T: Transport> Session<T> {
     async fn new(transport: T) -> Result<Self, Error> {
-        let client_hello = ClientHello::new(&[Capability::Base(Base::V1_0)]);
+        let client_hello = ClientHello::default();
         let (mut tx, mut rx) = transport.split();
         let ((), server_hello) =
             tokio::try_join!(client_hello.send(&mut tx), ServerHello::recv(&mut rx))?;

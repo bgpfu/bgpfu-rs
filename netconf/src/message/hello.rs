@@ -7,7 +7,7 @@ use quick_xml::{
 };
 
 use crate::{
-    capabilities::{Capabilities, Capability},
+    capabilities::{Base, Capabilities, Capability},
     session::SessionId,
 };
 
@@ -93,6 +93,14 @@ impl ClientHello {
     #[tracing::instrument(level = "debug")]
     pub(crate) fn capabilities(self) -> Capabilities {
         self.capabilities
+    }
+}
+
+impl Default for ClientHello {
+    fn default() -> Self {
+        const CAPABILITIES: &[Capability] =
+            &[Capability::Base(Base::V1_0), Capability::Base(Base::V1_1)];
+        Self::new(CAPABILITIES)
     }
 }
 
