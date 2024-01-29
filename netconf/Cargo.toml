@@ -40,3 +40,7 @@ clap-verbosity-flag.workspace = true
 simplelog.workspace = true
 version-sync.workspace = true
 rustls-pemfile = "^2.0"
+
+[[example]]
+name = "ephemeral"
+required-features = ["junos"]
