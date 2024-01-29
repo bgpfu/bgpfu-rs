@@ -4,12 +4,12 @@ use quick_xml::Writer;
 
 use crate::{
     capabilities::{Capability, Requirements},
-    message::{rpc::Empty, WriteError},
+    message::WriteError,
     session::Context,
     Error,
 };
 
-use super::{params::Required, Datastore, Operation, Source, WriteXml};
+use super::{params::Required, Datastore, EmptyReply, Operation, Source, WriteXml};
 
 #[derive(Debug, Clone)]
 pub struct Validate {
@@ -22,7 +22,7 @@ impl Operation for Validate {
         Requirements::Any(&[Capability::ValidateV1_0, Capability::ValidateV1_1]);
 
     type Builder<'a> = Builder<'a>;
-    type ReplyData = Empty;
+    type Reply = EmptyReply;
 }
 
 impl WriteXml for Validate {

@@ -4,12 +4,12 @@ use quick_xml::{events::BytesText, Writer};
 
 use crate::{
     capabilities::{Capability, Requirements},
-    message::{rpc::Empty, WriteError},
+    message::WriteError,
     session::Context,
     Error,
 };
 
-use super::{Operation, Token, WriteXml};
+use super::{EmptyReply, Operation, Token, WriteXml};
 
 #[derive(Debug, Clone)]
 pub struct CancelCommit {
@@ -21,7 +21,7 @@ impl Operation for CancelCommit {
     const REQUIRED_CAPABILITIES: Requirements = Requirements::One(Capability::ConfirmedCommitV1_1);
 
     type Builder<'a> = Builder<'a>;
-    type ReplyData = Empty;
+    type Reply = EmptyReply;
 }
 
 impl WriteXml for CancelCommit {

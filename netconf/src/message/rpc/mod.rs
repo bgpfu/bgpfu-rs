@@ -12,8 +12,7 @@ pub mod error;
 pub use self::error::{Error, Errors};
 
 pub mod operation;
-pub use self::operation::Operation;
-use self::operation::ReplyData;
+pub(crate) use self::operation::Operation;
 
 #[derive(Debug, Default, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct MessageId(usize);
@@ -134,18 +133,14 @@ impl ReadXml for PartialReply {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Reply<O: Operation> {
+pub(crate) struct Reply<O: Operation> {
     message_id: MessageId,
-    inner: ReplyInner<O::ReplyData>,
+    inner: O::Reply,
 }
 
 impl<O: Operation> Reply<O> {
-    pub(crate) fn into_result(self) -> Result<<O::ReplyData as ReplyData>::Ok, crate::Error> {
-        match self.inner {
-            ReplyInner::Ok => O::ReplyData::from_ok(),
-            ReplyInner::Data(data) => data.into_result(),
-            ReplyInner::RpcError(errors) => Err(errors.into()),
-        }
+    pub(crate) fn into_result(self) -> Result<<O::Reply as IntoResult>::Ok, crate::Error> {
+        self.inner.into_result()
     }
 }
 
@@ -157,7 +152,7 @@ impl<O: Operation> ReadXml for Reply<O> {
             .try_get_attribute("message-id")?
             .ok_or_else(|| ReadError::NoMessageId)
             .and_then(MessageId::try_from)?;
-        let inner = ReplyInner::read_xml(reader, start)?;
+        let inner = O::Reply::read_xml(reader, start)?;
         Ok(Self { message_id, inner })
     }
 }
@@ -183,31 +178,26 @@ impl<O: Operation> TryFrom<PartialReply> for Reply<O> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum ReplyInner<D> {
-    Ok,
-    Data(D),
-    RpcError(Errors),
+pub trait IntoResult {
+    type Ok;
+    fn into_result(self) -> Result<Self::Ok, crate::Error>;
 }
 
-impl<D: ReadXml> ReadXml for ReplyInner<D> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EmptyReply {
+    Ok,
+    Errs(Errors),
+}
+
+impl ReadXml for EmptyReply {
     #[tracing::instrument(skip(reader))]
     fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
         let mut errors = Errors::new();
         let mut this = None;
-        tracing::debug!("expecting <ok>, <data> or <rpc-error>");
+        tracing::debug!("expecting <ok> or <rpc-error>");
         loop {
             match reader.read_resolved_event()? {
-                (ResolveResult::Bound(ns), Event::Start(tag))
-                    if ns == xmlns::BASE
-                        && tag.local_name().as_ref() == b"data"
-                        && this.is_none()
-                        && errors.is_empty() =>
-                {
-                    tracing::debug!(?tag);
-                    this = Some(Self::Data(D::read_xml(reader, &tag)?));
-                }
                 (ResolveResult::Bound(ns), Event::Empty(tag))
                     if ns == xmlns::BASE
                         && tag.local_name().as_ref() == b"ok"
@@ -233,33 +223,75 @@ impl<D: ReadXml> ReadXml for ReplyInner<D> {
                 }
             }
         }
-        this.or_else(|| (!errors.is_empty()).then(|| Self::RpcError(errors)))
-            .ok_or_else(|| ReadError::missing_element("rpc-reply", "data/ok/rpc-error"))
+        this.or_else(|| (!errors.is_empty()).then(|| Self::Errs(errors)))
+            .ok_or_else(|| ReadError::missing_element("rpc-reply", "ok/rpc-error"))
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Empty {}
-
-impl ReadXml for Empty {
-    fn read_xml(_: &mut NsReader<&[u8]>, _: &BytesStart<'_>) -> Result<Self, ReadError> {
-        // TODO: should this return `Result::Err(..)` instead?
-        unreachable!()
-    }
-}
-
-impl ReplyData for Empty {
+impl IntoResult for EmptyReply {
     type Ok = ();
-
-    fn from_ok() -> Result<Self::Ok, crate::Error> {
-        Ok(())
-    }
-
-    fn into_result(self) -> Result<Self::Ok, crate::Error> {
-        unreachable!()
+    fn into_result(self) -> Result<<Self as IntoResult>::Ok, crate::Error> {
+        match self {
+            Self::Ok => Ok(()),
+            Self::Errs(errs) => Err(errs.into()),
+        }
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DataReply<D> {
+    Data(D),
+    Errs(Errors),
+}
+
+impl<D: ReadXml> ReadXml for DataReply<D> {
+    #[tracing::instrument(skip(reader))]
+    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
+        let end = start.to_end();
+        let mut errors = Errors::new();
+        let mut this = None;
+        tracing::debug!("expecting <data> or <rpc-error>");
+        loop {
+            match reader.read_resolved_event()? {
+                (ResolveResult::Bound(ns), Event::Start(tag))
+                    if ns == xmlns::BASE
+                        && tag.local_name().as_ref() == b"data"
+                        && this.is_none()
+                        && errors.is_empty() =>
+                {
+                    tracing::debug!(?tag);
+                    this = Some(Self::Data(D::read_xml(reader, &tag)?));
+                }
+                (ResolveResult::Bound(ns), Event::Start(tag))
+                    if ns == xmlns::BASE
+                        && tag.local_name().as_ref() == b"rpc-error"
+                        && this.is_none() =>
+                {
+                    tracing::debug!(?tag);
+                    errors.push(Error::read_xml(reader, &tag)?);
+                }
+                (_, Event::Comment(_)) => continue,
+                (_, Event::End(tag)) if tag == end => break,
+                (ns, event) => {
+                    tracing::error!(?event, ?ns, "unexpected xml event");
+                    return Err(ReadError::UnexpectedXmlEvent(event.into_owned()));
+                }
+            }
+        }
+        this.or_else(|| (!errors.is_empty()).then(|| Self::Errs(errors)))
+            .ok_or_else(|| ReadError::missing_element("rpc-reply", "data/rpc-error"))
+    }
+}
+
+impl<D> IntoResult for DataReply<D> {
+    type Ok = D;
+    fn into_result(self) -> Result<Self::Ok, crate::Error> {
+        match self {
+            Self::Data(data) => Ok(data),
+            Self::Errs(errs) => Err(errs.into()),
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use quick_xml::events::BytesText;
@@ -285,7 +317,7 @@ mod tests {
         const NAME: &'static str = "foo";
         const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
         type Builder<'a> = FooBuilder;
-        type ReplyData = Empty;
+        type Reply = EmptyReply;
     }
 
     #[derive(Debug, Default)]
@@ -327,7 +359,7 @@ mod tests {
         "#;
         let expect: Reply<Foo> = Reply {
             message_id: MessageId(101),
-            inner: ReplyInner::Ok,
+            inner: EmptyReply::Ok,
         };
         assert_eq!(
             expect,
@@ -350,7 +382,7 @@ mod tests {
         "#;
         let expect: Reply<Foo> = Reply {
             message_id: MessageId(101),
-            inner: ReplyInner::Ok,
+            inner: EmptyReply::Ok,
         };
         assert_eq!(
             expect,
@@ -374,7 +406,7 @@ mod tests {
         const NAME: &'static str = "bar";
         const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
         type Builder<'a> = BarBuilder;
-        type ReplyData = BarReply;
+        type Reply = DataReply<BarReply>;
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
@@ -415,18 +447,6 @@ mod tests {
         }
     }
 
-    impl ReplyData for BarReply {
-        type Ok = Self;
-
-        fn from_ok() -> Result<Self::Ok, crate::Error> {
-            Err(crate::Error::EmptyRpcReply)
-        }
-
-        fn into_result(self) -> Result<Self::Ok, crate::Error> {
-            Ok(self)
-        }
-    }
-
     #[derive(Debug, Default)]
     struct BarBuilder;
 
@@ -463,7 +483,7 @@ mod tests {
         "#;
         let expect: Reply<Bar> = Reply {
             message_id: MessageId(101),
-            inner: ReplyInner::Data(BarReply(99)),
+            inner: DataReply::Data(BarReply(99)),
         };
         assert_eq!(
             expect,
@@ -488,7 +508,7 @@ mod tests {
         "#;
         let expect: Reply<Bar> = Reply {
             message_id: MessageId(101),
-            inner: ReplyInner::Data(BarReply(99)),
+            inner: DataReply::Data(BarReply(99)),
         };
         assert_eq!(
             expect,

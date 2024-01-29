@@ -4,7 +4,7 @@ use quick_xml::Writer;
 
 use crate::{capabilities::Requirements, message::WriteError, session::Context, Error};
 
-use super::{params::Required, Datastore, Filter, Operation, Reply, WriteXml};
+use super::{params::Required, DataReply, Datastore, Filter, Opaque, Operation, WriteXml};
 
 #[derive(Debug, Default, Clone)]
 pub struct GetConfig {
@@ -17,7 +17,7 @@ impl Operation for GetConfig {
     const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
 
     type Builder<'a> = Builder<'a>;
-    type ReplyData = Reply;
+    type Reply = DataReply<Opaque>;
 }
 
 impl WriteXml for GetConfig {

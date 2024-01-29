@@ -7,12 +7,14 @@ use crate::{
     message::{
         rpc::{
             operation::{self, params::Required},
-            Empty, Operation,
+            Operation,
         },
         WriteError, WriteXml,
     },
     session::Context,
 };
+
+use super::BareReply;
 
 /// Create a private copy of the candidate configuration or open the default instance or a
 /// user-defined instance of the ephemeral configuration database.
@@ -30,17 +32,17 @@ impl Operation for OpenConfiguration {
     const REQUIRED_CAPABILITIES: Requirements =
         Requirements::One(Capability::JunosXmlManagementProtocol);
     type Builder<'a> = Builder<'a>;
-    type ReplyData = Empty;
+    type Reply = BareReply;
 }
 
 #[derive(Debug, Clone)]
-pub enum Target {
+enum Target {
     Private,
     Ephemeral(Ephemeral),
 }
 
 #[derive(Debug, Default, Clone)]
-pub enum Ephemeral {
+enum Ephemeral {
     #[default]
     Default,
     Named(Arc<str>),
@@ -87,9 +89,23 @@ pub struct Builder<'a> {
 }
 
 impl Builder<'_> {
-    pub fn target(mut self, target: Target) -> Self {
+    fn target(mut self, target: Target) -> Self {
         self.target.set(target);
         self
+    }
+
+    pub fn private(self) -> Self {
+        self.target(Target::Private)
+    }
+
+    pub fn ephemeral<S: AsRef<str>>(self, name: Option<S>) -> Self {
+        #[allow(clippy::option_if_let_else)]
+        let ephemeral = if let Some(name) = name {
+            Ephemeral::Named(name.as_ref().into())
+        } else {
+            Ephemeral::Default
+        };
+        self.target(Target::Ephemeral(ephemeral))
     }
 }
 

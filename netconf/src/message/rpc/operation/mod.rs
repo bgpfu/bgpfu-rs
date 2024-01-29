@@ -18,12 +18,14 @@ use crate::{
     Error,
 };
 
+use super::{DataReply, EmptyReply, IntoResult};
+
 pub trait Operation: Debug + WriteXml + Send + Sync + Sized {
     const NAME: &'static str;
     const REQUIRED_CAPABILITIES: Requirements;
 
     type Builder<'a>: Builder<'a, Self>;
-    type ReplyData: ReplyData;
+    type Reply: Debug + ReadXml + IntoResult;
 
     fn new<'a, F>(ctx: &'a Context, build_fn: F) -> Result<Self, Error>
     where
@@ -47,13 +49,6 @@ pub trait Builder<'a, O: Operation>: Debug + Sized {
     {
         build_fn(self)
     }
-}
-
-pub trait ReplyData: Debug + ReadXml + Sized {
-    type Ok;
-
-    fn from_ok() -> Result<Self::Ok, Error>;
-    fn into_result(self) -> Result<Self::Ok, Error>;
 }
 
 mod params;
@@ -250,11 +245,11 @@ impl WriteXml for Filter {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Reply {
+pub struct Opaque {
     inner: Box<str>,
 }
 
-impl ReadXml for Reply {
+impl ReadXml for Opaque {
     #[tracing::instrument(skip(reader))]
     fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
@@ -263,25 +258,13 @@ impl ReadXml for Reply {
     }
 }
 
-impl ReplyData for Reply {
-    type Ok = Self;
-
-    fn from_ok() -> Result<Self::Ok, Error> {
-        Err(Error::EmptyRpcReply)
-    }
-
-    fn into_result(self) -> Result<Self::Ok, Error> {
-        Ok(self)
-    }
-}
-
-impl Display for Reply {
+impl Display for Opaque {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Display::fmt(&self.inner, f)
     }
 }
 
-impl AsRef<str> for Reply {
+impl AsRef<str> for Opaque {
     fn as_ref(&self) -> &str {
         self.inner.as_ref()
     }
@@ -363,14 +346,14 @@ mod tests {
     #[test]
     fn reply_from_xml() {
         let reply = "<configuration><top/></configuration>";
-        let expect = Reply {
+        let expect = Opaque {
             inner: reply.into(),
         };
         let msg = format!("<data>{reply}</data>");
         let mut reader = NsReader::from_str(msg.as_str());
         _ = reader.trim_text(true);
         if let Event::Start(start) = reader.read_event().unwrap() {
-            assert_eq!(Reply::read_xml(&mut reader, &start).unwrap(), expect);
+            assert_eq!(Opaque::read_xml(&mut reader, &start).unwrap(), expect);
         } else {
             panic!("missing <data> tag")
         }

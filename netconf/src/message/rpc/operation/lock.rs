@@ -2,14 +2,9 @@ use std::io::Write;
 
 use quick_xml::Writer;
 
-use crate::{
-    capabilities::Requirements,
-    message::{rpc::Empty, WriteError},
-    session::Context,
-    Error,
-};
+use crate::{capabilities::Requirements, message::WriteError, session::Context, Error};
 
-use super::{params::Required, Datastore, Operation, WriteXml};
+use super::{params::Required, Datastore, EmptyReply, Operation, WriteXml};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Lock {
@@ -21,7 +16,7 @@ impl Operation for Lock {
     const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
 
     type Builder<'a> = Builder<'a>;
-    type ReplyData = Empty;
+    type Reply = EmptyReply;
 }
 
 impl WriteXml for Lock {
@@ -48,7 +43,7 @@ impl Operation for Unlock {
     const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
 
     type Builder<'a> = Builder<'a>;
-    type ReplyData = Empty;
+    type Reply = EmptyReply;
 }
 
 impl WriteXml for Unlock {

@@ -2,7 +2,7 @@ use std::io::Write;
 
 use quick_xml::Writer;
 
-use super::{super::Empty, Operation, WriteXml};
+use super::{EmptyReply, Operation, WriteXml};
 use crate::{capabilities::Requirements, message::WriteError, session::Context, Error};
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -12,7 +12,7 @@ impl Operation for CloseSession {
     const NAME: &'static str = "close-session";
     const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
     type Builder<'a> = Builder;
-    type ReplyData = Empty;
+    type Reply = EmptyReply;
 }
 
 impl WriteXml for CloseSession {

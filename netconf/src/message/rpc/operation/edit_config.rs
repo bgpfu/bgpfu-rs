@@ -4,12 +4,12 @@ use quick_xml::{events::BytesText, Writer};
 
 use crate::{
     capabilities::{Capability, Requirements},
-    message::{rpc::Empty, WriteError},
+    message::WriteError,
     session::Context,
     Error,
 };
 
-use super::{params::Required, Datastore, Operation, Url, WriteXml};
+use super::{params::Required, Datastore, EmptyReply, Operation, Url, WriteXml};
 
 #[derive(Debug, Clone)]
 pub struct EditConfig {
@@ -24,7 +24,7 @@ impl Operation for EditConfig {
     const NAME: &'static str = "edit-config";
     const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
     type Builder<'a> = Builder<'a>;
-    type ReplyData = Empty;
+    type Reply = EmptyReply;
 }
 
 impl WriteXml for EditConfig {

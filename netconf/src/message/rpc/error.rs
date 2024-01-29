@@ -456,7 +456,7 @@ mod tests {
     use crate::{
         capabilities::Requirements,
         message::{
-            rpc::{operation, Empty, MessageId, Operation, PartialReply, Reply, ReplyInner},
+            rpc::{operation, EmptyReply, MessageId, Operation, PartialReply, Reply},
             ServerMsg, WriteError, WriteXml,
         },
     };
@@ -468,7 +468,7 @@ mod tests {
         const NAME: &'static str = "dummy";
         const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
         type Builder<'a> = Builder;
-        type ReplyData = Empty;
+        type Reply = EmptyReply;
     }
 
     impl WriteXml for Dummy {
@@ -509,7 +509,7 @@ mod tests {
         "#;
         let expect: Reply<Dummy> = Reply {
             message_id: MessageId(101),
-            inner: ReplyInner::RpcError(Errors {
+            inner: EmptyReply::Errs(Errors {
                 inner: vec![Error {
                     error_type: Type::Rpc,
                     error_tag: Tag::MissingAttribute,
@@ -565,7 +565,7 @@ mod tests {
         "#;
         let expect: Reply<Dummy> = Reply {
             message_id: MessageId(101),
-            inner: ReplyInner::RpcError(Errors {
+            inner: EmptyReply::Errs(Errors {
                 inner: vec![
                     Error {
                         error_type: Type::Application,

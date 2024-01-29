@@ -4,12 +4,12 @@ use quick_xml::Writer;
 
 use crate::{
     capabilities::{Capability, Requirements},
-    message::{rpc::Empty, WriteError},
+    message::WriteError,
     session::Context,
     Error,
 };
 
-use super::{Operation, WriteXml};
+use super::{EmptyReply, Operation, WriteXml};
 
 #[derive(Debug, Clone, Copy)]
 pub struct DiscardChanges {
@@ -22,7 +22,7 @@ impl Operation for DiscardChanges {
     const REQUIRED_CAPABILITIES: Requirements = Requirements::One(Capability::Candidate);
 
     type Builder<'a> = Builder<'a>;
-    type ReplyData = Empty;
+    type Reply = EmptyReply;
 }
 
 impl WriteXml for DiscardChanges {

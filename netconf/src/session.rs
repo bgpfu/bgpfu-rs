@@ -16,7 +16,8 @@ use crate::{
     message::{
         rpc::{
             self,
-            operation::{Builder, CloseSession, ReplyData},
+            operation::{Builder, CloseSession},
+            IntoResult,
         },
         ClientHello, ClientMsg, ReadError, ServerHello, ServerMsg,
     },
@@ -230,7 +231,7 @@ impl<T: Transport> Session<T> {
     pub async fn rpc<O, F>(
         &mut self,
         build_fn: F,
-    ) -> Result<impl Future<Output = Result<<O::ReplyData as ReplyData>::Ok, Error>>, Error>
+    ) -> Result<impl Future<Output = Result<<O::Reply as IntoResult>::Ok, Error>>, Error>
     where
         O: rpc::Operation,
         // TODO: consider whether F should be Fn or FnOnce

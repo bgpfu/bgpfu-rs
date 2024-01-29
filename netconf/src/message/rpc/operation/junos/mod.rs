@@ -1,3 +1,14 @@
+use quick_xml::{
+    events::{BytesStart, Event},
+    name::ResolveResult,
+    NsReader,
+};
+
+use crate::message::{
+    rpc::{Error, Errors, IntoResult},
+    xmlns, ReadError, ReadXml,
+};
+
 pub mod open_configuration;
 #[doc(inline)]
 pub use self::open_configuration::OpenConfiguration;
@@ -101,6 +112,51 @@ trivial_ops! {
 //     type ReplyData = Never;
 // }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BareReply {
+    Ok,
+    Errs(Errors),
+}
+
+impl ReadXml for BareReply {
+    fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
+        let end = start.to_end();
+        let mut errors = Errors::new();
+        tracing::debug!("expecting <ok> or <rpc-error>");
+        loop {
+            match reader.read_resolved_event()? {
+                (ResolveResult::Bound(ns), Event::Start(tag))
+                    if ns == xmlns::BASE && tag.local_name().as_ref() == b"rpc-error" =>
+                {
+                    tracing::debug!(?tag);
+                    errors.push(Error::read_xml(reader, &tag)?);
+                }
+                (_, Event::Comment(_)) => continue,
+                (_, Event::End(tag)) if tag == end => break,
+                (ns, event) => {
+                    tracing::error!(?event, ?ns, "unexpected xml event");
+                    return Err(ReadError::UnexpectedXmlEvent(event.into_owned()));
+                }
+            }
+        }
+        if errors.is_empty() {
+            Ok(Self::Ok)
+        } else {
+            Ok(Self::Errs(errors))
+        }
+    }
+}
+
+impl IntoResult for BareReply {
+    type Ok = ();
+    fn into_result(self) -> Result<<Self as IntoResult>::Ok, crate::Error> {
+        match self {
+            Self::Ok => Ok(()),
+            Self::Errs(errs) => Err(errs.into()),
+        }
+    }
+}
+
 macro_rules! trivial_ops {
     ( $(
         $( #[$attr:meta] )*
@@ -113,6 +169,8 @@ macro_rules! trivial_ops {
                 #[doc(inline)]
                 $vis use self::[<$oper_ty:snake>]::$oper_ty;
                 $vis mod [<$oper_ty:snake>] {
+                    use super::BareReply;
+
                     $( #[$attr] )*
                     #[derive(Debug, Clone, Copy)]
                     $vis struct $oper_ty {
@@ -126,7 +184,7 @@ macro_rules! trivial_ops {
                                 $crate::capabilities::Capability::JunosXmlManagementProtocol
                             );
                         type Builder<'a> = Builder<'a>;
-                        type ReplyData = $crate::message::rpc::Empty;
+                        type Reply = BareReply;
                     }
 
                     impl $crate::message::WriteXml for $oper_ty {

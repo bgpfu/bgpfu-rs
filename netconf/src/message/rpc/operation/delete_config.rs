@@ -2,14 +2,9 @@ use std::io::Write;
 
 use quick_xml::Writer;
 
-use crate::{
-    capabilities::Requirements,
-    message::{rpc::Empty, WriteError},
-    session::Context,
-    Error,
-};
+use crate::{capabilities::Requirements, message::WriteError, session::Context, Error};
 
-use super::{params::Required, Datastore, Operation, Url, WriteXml};
+use super::{params::Required, Datastore, EmptyReply, Operation, Url, WriteXml};
 
 #[derive(Debug, Clone)]
 pub struct DeleteConfig {
@@ -21,7 +16,7 @@ impl Operation for DeleteConfig {
     const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
 
     type Builder<'a> = Builder<'a>;
-    type ReplyData = Empty;
+    type Reply = EmptyReply;
 }
 
 impl WriteXml for DeleteConfig {

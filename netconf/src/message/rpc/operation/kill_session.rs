@@ -4,12 +4,12 @@ use quick_xml::{events::BytesText, Writer};
 
 use crate::{
     capabilities::Requirements,
-    message::{rpc::Empty, WriteError},
+    message::WriteError,
     session::{Context, SessionId},
     Error,
 };
 
-use super::{params::Required, Operation, WriteXml};
+use super::{params::Required, EmptyReply, Operation, WriteXml};
 
 #[derive(Debug, Clone, Copy)]
 pub struct KillSession {
@@ -21,7 +21,7 @@ impl Operation for KillSession {
     const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
 
     type Builder<'a> = Builder<'a>;
-    type ReplyData = Empty;
+    type Reply = EmptyReply;
 }
 
 impl WriteXml for KillSession {
