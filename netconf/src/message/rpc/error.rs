@@ -389,7 +389,7 @@ impl ReadXml for Info {
         loop {
             match reader.read_resolved_event()? {
                 (ResolveResult::Bound(ns), Event::Start(tag)) if ns == xmlns::BASE => {
-                    match tag.name().as_ref() {
+                    match tag.local_name().as_ref() {
                         b"bad-attribute" => inner.push(InfoElement::BadAttribute(
                             reader.read_text(tag.to_end().name())?.as_ref().into(),
                         )),
