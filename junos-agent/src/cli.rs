@@ -1,18 +1,19 @@
-use std::fmt;
 use std::fs::File;
 use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::{fmt, path::Path};
 
 use anyhow::Context;
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser};
 
 use clap_verbosity_flag::{Verbosity, WarnLevel};
 
+use rustls_pki_types::ServerName;
 use simplelog::{ColorChoice, TermLogger, TerminalMode, WriteLogger};
 
-use crate::{jet::Transport, task::Updater};
+use crate::task::Updater;
 
 /// Entry-point function for `bgpfu-junos-agent`.
 #[allow(clippy::missing_errors_doc)]
@@ -21,14 +22,7 @@ pub async fn main() -> anyhow::Result<()> {
 
     args.logging.init()?;
 
-    let updater = Updater::new(
-        args.jet_transport.init()?,
-        args.junos.username,
-        args.junos.password,
-        args.junos.ephemeral_db,
-        args.irrd.host,
-        args.irrd.port,
-    );
+    let updater = Updater::new(args.netconf, args.irrd, args.junos);
 
     match args.frequency {
         Frequency::OneShot => updater.run().await,
@@ -45,11 +39,11 @@ struct Cli {
     #[arg(short = 'f', long, default_value_t = 3600.into())]
     frequency: Frequency,
 
-    #[command(subcommand)]
-    jet_transport: JetTransport,
-
     #[command(flatten, next_help_heading = "Junos options")]
     junos: JunosOpts,
+
+    #[command(flatten, next_help_heading = "NETCONF connection options")]
+    netconf: NetconfOpts,
 
     #[command(flatten, next_help_heading = "IRR connection options")]
     irrd: IrrdOpts,
@@ -91,45 +85,66 @@ impl FromStr for Frequency {
     }
 }
 
-// TODO: this would be better as sets of mutually exclusive args
-// see https://github.com/clap-rs/clap/issues/2621
-#[derive(Debug, Subcommand)]
-enum JetTransport {
-    Local {
-        /// JET socket path
-        #[arg(long, default_value = "/var/run/japi_jsd")]
-        jet_sock: PathBuf,
-    },
-    Remote {
-        /// JET API endpoint hostname or IP address.
-        #[arg(long)]
-        jet_host: String,
+#[derive(Debug, Args)]
+pub(super) struct NetconfOpts {
+    /// NETCONF server hostname or IP address.
+    #[arg(long = "netconf-host", id = "netconf-host", value_name = "HOST")]
+    host: String,
 
-        /// JET API endpoint port.
-        #[arg(long, default_value_t = 32767)]
-        jet_port: u16,
+    /// NETCONF server port.
+    #[arg(
+        long = "netconf-port",
+        id = "netconf-port",
+        default_value_t = 6513,
+        value_name = "PORT"
+    )]
+    port: u16,
 
-        /// JET API endpoint TLS CA certificate path.
-        #[arg(long)]
-        ca_cert_path: Option<PathBuf>,
+    /// NETCONF TLS transport CA certificate path.
+    #[arg(long)]
+    ca_cert_path: PathBuf,
 
-        /// Override the domain name against which the server's TLS certificate is verified.
-        #[arg(long)]
-        tls_server_name: Option<String>,
-    },
+    /// NETCONF TLS transport client certificate path.
+    #[arg(long)]
+    client_cert_path: PathBuf,
+
+    /// NETCONF TLS transport client private key path.
+    #[arg(long)]
+    client_key_path: PathBuf,
+
+    /// Override the domain name against which the NETCONF server's TLS certificate is verified.
+    #[arg(long, value_parser = parse_server_name)]
+    tls_server_name: Option<ServerName<'static>>,
 }
 
-impl JetTransport {
-    fn init(self) -> anyhow::Result<Transport> {
-        match self {
-            Self::Local { jet_sock } => Ok(Transport::unix(jet_sock)),
-            Self::Remote {
-                jet_host,
-                jet_port,
-                ca_cert_path,
-                tls_server_name,
-            } => Transport::https(jet_host, jet_port, ca_cert_path, tls_server_name),
-        }
+fn parse_server_name(name: &str) -> anyhow::Result<ServerName<'static>> {
+    let parsed = ServerName::try_from(name).context("failed to parse server name")?;
+    Ok(parsed.to_owned())
+}
+
+impl NetconfOpts {
+    pub(super) fn host(&self) -> &str {
+        &self.host
+    }
+
+    pub(super) const fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub(super) fn ca_cert_path(&self) -> &Path {
+        &self.ca_cert_path
+    }
+
+    pub(super) fn client_cert_path(&self) -> &Path {
+        &self.client_cert_path
+    }
+
+    pub(super) fn client_key_path(&self) -> &Path {
+        &self.client_key_path
+    }
+
+    pub(super) fn tls_server_name(&self) -> Option<ServerName<'static>> {
+        self.tls_server_name.clone()
     }
 }
 
@@ -192,27 +207,45 @@ impl FromStr for LoggingDest {
 }
 
 #[derive(Debug, Args)]
-struct IrrdOpts {
+pub(super) struct IrrdOpts {
     /// IRRd server hostname or IP address.
-    #[arg(long = "irrd-host", default_value = "whois.radb.net")]
+    #[arg(
+        long = "irrd-host",
+        id = "irrd-host",
+        default_value = "whois.radb.net",
+        value_name = "HOST"
+    )]
     host: String,
 
     /// IRRd server port.
-    #[arg(long = "irrd-port", default_value_t = 43)]
+    #[arg(
+        long = "irrd-port",
+        id = "irrd-port",
+        default_value_t = 43,
+        value_name = "PORT"
+    )]
     port: u16,
 }
 
+impl IrrdOpts {
+    pub(super) fn host(&self) -> &str {
+        &self.host
+    }
+
+    pub(super) const fn port(&self) -> u16 {
+        self.port
+    }
+}
+
 #[derive(Debug, Args)]
-struct JunosOpts {
+pub(super) struct JunosOpts {
     /// Junos ephemeral DB instance name.
     #[arg(long, default_value = "bgpfu")]
     ephemeral_db: String,
+}
 
-    /// Authentication username.
-    #[arg(short = 'u', long, default_value = "bgpfu")]
-    username: String,
-
-    /// Authentication password.
-    #[arg(short = 'p', long, default_value = "bgpFU1")]
-    password: String,
+impl JunosOpts {
+    pub(super) fn ephemeral_db(&self) -> &str {
+        &self.ephemeral_db
+    }
 }

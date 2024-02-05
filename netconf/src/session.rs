@@ -8,7 +8,7 @@ use std::{
     sync::Arc,
 };
 
-use rustls_pki_types::{CertificateDer, InvalidDnsNameError, PrivateKeyDer, ServerName};
+use rustls_pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use tokio::{net::ToSocketAddrs, sync::Mutex};
 
 use crate::{
@@ -161,7 +161,8 @@ impl Session<Tls> {
     ) -> Result<Self, Error>
     where
         A: ToSocketAddrs + Debug + Send,
-        S: TryInto<ServerName<'static>, Error = InvalidDnsNameError> + Debug + Send,
+        S: TryInto<ServerName<'static>> + Debug + Send,
+        Error: From<S::Error>,
     {
         tracing::info!("starting tls transport");
         let transport = Tls::connect(addr, server_name, ca_cert, client_cert, client_key).await?;
@@ -234,8 +235,7 @@ impl<T: Transport> Session<T> {
     ) -> Result<impl Future<Output = Result<<O::Reply as IntoResult>::Ok, Error>>, Error>
     where
         O: rpc::Operation,
-        // TODO: consider whether F should be Fn or FnOnce
-        F: Fn(O::Builder<'_>) -> Result<O, Error> + Send,
+        F: FnOnce(O::Builder<'_>) -> Result<O, Error> + Send,
     {
         let message_id = self.last_message_id.increment();
         let request = O::new(&self.context, build_fn)

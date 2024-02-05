@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::{fmt::Debug, io::Write};
 
 use quick_xml::{events::BytesText, Writer};
 
@@ -12,22 +12,28 @@ use crate::{
 use super::{params::Required, Datastore, EmptyReply, Operation, Url, WriteXml};
 
 #[derive(Debug, Clone)]
-pub struct EditConfig {
+pub struct EditConfig<D> {
     target: Datastore,
-    source: Source,
+    source: Source<D>,
     default_operation: DefaultOperation,
     error_option: ErrorOption,
     test_option: TestOption,
 }
 
-impl Operation for EditConfig {
+impl<D> Operation for EditConfig<D>
+where
+    D: WriteXml + Debug + Send + Sync,
+{
     const NAME: &'static str = "edit-config";
     const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
-    type Builder<'a> = Builder<'a>;
+    type Builder<'a> = Builder<'a, D>;
     type Reply = EmptyReply;
 }
 
-impl WriteXml for EditConfig {
+impl<D> WriteXml for EditConfig<D>
+where
+    D: WriteXml + Debug + Send + Sync,
+{
     fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
         writer
             .create_element(Self::NAME)
@@ -59,16 +65,19 @@ impl WriteXml for EditConfig {
 
 #[derive(Debug, Clone)]
 #[must_use]
-pub struct Builder<'a> {
+pub struct Builder<'a, D> {
     ctx: &'a Context,
     target: Required<Datastore>,
-    source: Required<Source>,
+    source: Required<Source<D>>,
     default_operation: DefaultOperation,
     error_option: ErrorOption,
     test_option: TestOption,
 }
 
-impl Builder<'_> {
+impl<D> Builder<'_, D>
+where
+    D: WriteXml + Debug + Send + Sync,
+{
     pub fn target(mut self, target: Datastore) -> Result<Self, Error> {
         target.try_as_target(self.ctx).map(|target| {
             self.target.set(target);
@@ -76,7 +85,7 @@ impl Builder<'_> {
         })
     }
 
-    pub fn config(mut self, config: String) -> Self {
+    pub fn config(mut self, config: D) -> Self {
         self.source.set(Source::Config(config));
         self
     }
@@ -94,21 +103,24 @@ impl Builder<'_> {
     }
 
     pub fn error_option(mut self, error_option: ErrorOption) -> Result<Self, Error> {
-        error_option.try_use(self.ctx).map(|error_option| {
+        error_option.try_use::<D>(self.ctx).map(|error_option| {
             self.error_option = error_option;
             self
         })
     }
 
     pub fn test_option(mut self, test_option: TestOption) -> Result<Self, Error> {
-        test_option.try_use(self.ctx).map(|test_option| {
+        test_option.try_use::<D>(self.ctx).map(|test_option| {
             self.test_option = test_option;
             self
         })
     }
 }
 
-impl<'a> super::Builder<'a, EditConfig> for Builder<'a> {
+impl<'a, D> super::Builder<'a, EditConfig<D>> for Builder<'a, D>
+where
+    D: WriteXml + Debug + Send + Sync,
+{
     fn new(ctx: &'a Context) -> Self {
         Self {
             ctx,
@@ -120,10 +132,10 @@ impl<'a> super::Builder<'a, EditConfig> for Builder<'a> {
         }
     }
 
-    fn finish(self) -> Result<EditConfig, Error> {
+    fn finish(self) -> Result<EditConfig<D>, Error> {
         Ok(EditConfig {
-            target: self.target.require::<EditConfig>("target")?,
-            source: self.source.require::<EditConfig>("config")?,
+            target: self.target.require::<EditConfig<D>>("target")?,
+            source: self.source.require::<EditConfig<D>>("config")?,
             default_operation: self.default_operation,
             error_option: self.error_option,
             test_option: self.test_option,
@@ -132,44 +144,23 @@ impl<'a> super::Builder<'a, EditConfig> for Builder<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub enum Source {
-    Config(String),
+pub enum Source<D> {
+    Config(D),
     Url(Url),
 }
 
-impl WriteXml for Source {
+impl<D> WriteXml for Source<D>
+where
+    D: WriteXml,
+{
     fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
         match self {
             Self::Config(config) => writer
                 .create_element("config")
-                .write_inner_content(|writer| {
-                    writer
-                        .get_mut()
-                        .write_all(config.as_bytes())
-                        .map_err(|err| WriteError::Other(err.into()))
-                })
+                .write_inner_content(|writer| config.write_xml(writer))
                 .map(|_| ()),
             Self::Url(url) => url.write_xml(writer),
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Config {
-    inner: String,
-}
-
-impl WriteXml for Config {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
-        writer
-            .create_element("config")
-            .write_inner_content(|writer| {
-                writer
-                    .get_mut()
-                    .write_all(self.inner.as_bytes())
-                    .map_err(|err| WriteError::Other(err.into()))
-            })
-            .map(|_| ())
     }
 }
 
@@ -216,7 +207,10 @@ impl TestOption {
         }
     }
 
-    fn try_use(self, ctx: &Context) -> Result<Self, Error> {
+    fn try_use<D>(self, ctx: &Context) -> Result<Self, Error>
+    where
+        D: WriteXml + Debug + Send + Sync,
+    {
         let required_capabilities = match self {
             Self::TestThenSet | Self::Set => {
                 Requirements::Any(&[Capability::ValidateV1_0, Capability::ValidateV1_1])
@@ -227,7 +221,7 @@ impl TestOption {
             Ok(self)
         } else {
             Err(Error::UnsupportedOperParameterValue(
-                EditConfig::NAME,
+                EditConfig::<D>::NAME,
                 "<test-option>",
                 self.as_str(),
                 required_capabilities,
@@ -257,7 +251,10 @@ impl ErrorOption {
         }
     }
 
-    fn try_use(self, ctx: &Context) -> Result<Self, Error> {
+    fn try_use<D>(self, ctx: &Context) -> Result<Self, Error>
+    where
+        D: WriteXml + Debug + Send + Sync,
+    {
         let required_capabilities = match self {
             Self::StopOnError | Self::ContinueOnError => Requirements::None,
             Self::RollbackOnError => Requirements::One(Capability::RollbackOnError),
@@ -266,7 +263,7 @@ impl ErrorOption {
             Ok(self)
         } else {
             Err(Error::UnsupportedOperParameterValue(
-                EditConfig::NAME,
+                EditConfig::<D>::NAME,
                 "<error-option>",
                 self.as_str(),
                 required_capabilities,
@@ -279,7 +276,7 @@ impl ErrorOption {
 mod tests {
     use super::*;
     use crate::message::{
-        rpc::{MessageId, Request},
+        rpc::{operation::Opaque, MessageId, Request},
         ClientMsg,
     };
 
@@ -289,7 +286,7 @@ mod tests {
             message_id: MessageId(101),
             operation: EditConfig {
                 target: Datastore::Running,
-                source: Source::Config("<foo>bar</foo>".to_string()),
+                source: Source::<Opaque>::Config("<foo>bar</foo>".into()),
                 default_operation: DefaultOperation::default(),
                 error_option: ErrorOption::default(),
                 test_option: TestOption::default(),

@@ -1,107 +1,125 @@
-use std::io::Cursor;
+use std::{fmt::Debug, io::Write};
 
-use anyhow::Context;
+use ip::{
+    any::PrefixSet,
+    concrete,
+    traits::{Afi, PrefixSet as _},
+    Ipv4, Ipv6,
+};
 
-use ip::traits::PrefixSet as _;
+use netconf::message::{WriteError, WriteXml};
 
-use xmhell::quick_xml::{self, events::BytesText, Writer};
+use quick_xml::{events::BytesText, Writer};
 
-use super::EvaluatedPolicyStmts;
+use super::{EvaluatedPolicyStmts, PolicyStmt};
 
-pub(crate) trait ToXml {
-    fn to_xml(self) -> anyhow::Result<String>;
-}
+pub(crate) trait WriteConfig: WriteXml + Debug + Send + Sync {}
 
-impl ToXml for EvaluatedPolicyStmts {
-    fn to_xml(self) -> anyhow::Result<String> {
-        fn write_filter_term<A: ip::Afi, W: std::io::Write>(
-            set: &ip::concrete::PrefixSet<A>,
-            writer: &mut Writer<W>,
-        ) -> Result<(), quick_xml::Error> {
-            let afi_name = match A::as_afi() {
-                ip::concrete::Afi::Ipv4 => "inet",
-                ip::concrete::Afi::Ipv6 => "inet6",
-            };
-            _ = writer
-                .create_element("term")
-                .write_inner_content(|writer| {
-                    _ = writer
-                        .create_element("name")
-                        .write_text_content(BytesText::new(afi_name))?;
-                    _ = writer
-                        .create_element("from")
-                        .write_inner_content(|writer| {
-                            _ = writer
-                                .create_element("family")
-                                .write_text_content(BytesText::new(afi_name))?;
-                            set.ranges().try_for_each(|range| {
-                                _ = writer.create_element("route-filter").write_inner_content(
-                                    |writer| {
-                                        _ = writer.create_element("address").write_text_content(
-                                            BytesText::new(&format!("{}", range.prefix())),
-                                        )?;
-                                        _ = writer
-                                            .create_element("prefix-length-range")
-                                            .write_text_content(BytesText::new(&format!(
-                                                "/{}-/{}",
-                                                range.lower(),
-                                                range.upper()
-                                            )))?;
-                                        Ok(())
-                                    },
-                                )?;
-                                Ok::<_, quick_xml::Error>(())
-                            })?;
-                            Ok(())
-                        })?;
-                    _ = writer
-                        .create_element("then")
-                        .write_inner_content(|writer| {
-                            _ = writer.create_element("accept").write_empty()?;
-                            Ok(())
-                        })?;
-                    Ok(())
-                })?;
-            Ok(())
-        }
-        let mut buf = Cursor::new(Vec::new());
-        let mut writer = Writer::new_with_indent(&mut buf, b' ', 4);
-        _ = writer
+impl WriteConfig for EvaluatedPolicyStmts {}
+
+impl WriteXml for EvaluatedPolicyStmts {
+    #[tracing::instrument(skip(self, writer), level = "debug")]
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        writer
             .create_element("configuration")
             .write_inner_content(|writer| {
                 _ = writer
                     .create_element("policy-options")
                     .write_inner_content(|writer| {
-                        self.0.into_iter().try_for_each(|stmt| {
-                            _ = writer
-                                .create_element("policy-statement")
-                                .with_attribute(("operation", "replace"))
-                                .write_inner_content(|writer| {
-                                    _ = writer
-                                        .create_element("name")
-                                        .write_text_content(BytesText::new(&stmt.name))?;
-                                    let (ipv4, ipv6) = stmt.content.partition();
-                                    if !ipv4.is_empty() {
-                                        write_filter_term(&ipv4, writer)?;
-                                    }
-                                    if !ipv6.is_empty() {
-                                        write_filter_term(&ipv6, writer)?;
-                                    }
-                                    _ = writer.create_element("then").write_inner_content(
-                                        |writer| {
-                                            _ = writer.create_element("reject").write_empty()?;
-                                            Ok(())
-                                        },
-                                    )?;
-                                    Ok(())
-                                })?;
-                            Ok::<_, quick_xml::Error>(())
-                        })?;
-                        Ok(())
+                        self.0.iter().try_for_each(|stmt| stmt.write_xml(writer))
                     })?;
                 Ok(())
             })
-            .context("failed to write xml config")?;
-        String::from_utf8(buf.into_inner()).context("utf-8 encoding error")
+            .map(|_| ())
+    }
+}
+
+impl WriteXml for PolicyStmt<PrefixSet> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        writer
+            .create_element("policy-statement")
+            .write_inner_content(|writer| {
+                _ = writer
+                    .create_element("name")
+                    .write_text_content(BytesText::new(&self.name))?;
+                let (ipv4, ipv6) = self.partition();
+                if ipv4.is_non_empty() {
+                    ipv4.write_xml(writer)?;
+                }
+                if ipv6.is_non_empty() {
+                    ipv6.write_xml(writer)?;
+                }
+                _ = writer
+                    .create_element("then")
+                    .write_inner_content(|writer| {
+                        writer.create_element("reject").write_empty().map(|_| ())
+                    })?;
+                Ok(())
+            })
+            .map(|_| ())
+    }
+}
+
+impl PolicyStmt<PrefixSet> {
+    const fn partition(&self) -> (Term<'_, Ipv4>, Term<'_, Ipv6>) {
+        let (ipv4, ipv6) = self.content.as_partitions();
+        (Term(ipv4), Term(ipv6))
+    }
+}
+
+struct Term<'a, A: Afi>(&'a concrete::PrefixSet<A>);
+
+impl<A: Afi> Term<'_, A> {
+    fn is_non_empty(&self) -> bool {
+        !self.0.is_empty()
+    }
+}
+
+impl<A: Afi> WriteXml for Term<'_, A> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        let afi_name = match A::as_afi() {
+            ip::concrete::Afi::Ipv4 => "inet",
+            ip::concrete::Afi::Ipv6 => "inet6",
+        };
+        writer
+            .create_element("term")
+            .write_inner_content(|writer| {
+                _ = writer
+                    .create_element("name")
+                    .write_text_content(BytesText::new(afi_name))?;
+                _ = writer
+                    .create_element("from")
+                    .write_inner_content(|writer| {
+                        _ = writer
+                            .create_element("family")
+                            .write_text_content(BytesText::new(afi_name))?;
+                        self.0.ranges().try_for_each(|range| {
+                            _ = writer.create_element("route-filter").write_inner_content(
+                                |writer| {
+                                    _ = writer.create_element("address").write_text_content(
+                                        BytesText::new(&range.prefix().to_string()),
+                                    )?;
+                                    _ = writer
+                                        .create_element("prefix-length-range")
+                                        .write_text_content(BytesText::new(&format!(
+                                            "/{}-/{}",
+                                            range.lower(),
+                                            range.upper()
+                                        )))?;
+                                    Ok::<_, WriteError>(())
+                                },
+                            )?;
+                            Ok::<_, WriteError>(())
+                        })?;
+                        Ok::<_, WriteError>(())
+                    })?;
+                _ = writer
+                    .create_element("then")
+                    .write_inner_content(|writer| {
+                        writer.create_element("accept").write_empty().map(|_| ())
+                    })?;
+                Ok(())
+            })
+            .map(|_| ())
     }
 }

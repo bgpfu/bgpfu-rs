@@ -1,26 +1,48 @@
-use std::io::Write;
+use std::{fmt::Debug, io::Write, marker::PhantomData};
 
 use quick_xml::Writer;
 
-use crate::{capabilities::Requirements, message::WriteError, session::Context, Error};
+use crate::{
+    capabilities::Requirements,
+    message::{ReadXml, WriteError},
+    session::Context,
+    Error,
+};
 
-use super::{params::Required, DataReply, Datastore, Filter, Opaque, Operation, WriteXml};
+use super::{params::Required, DataReply, Datastore, Filter, Operation, WriteXml};
 
-#[derive(Debug, Default, Clone)]
-pub struct GetConfig {
+#[derive(Debug, Clone)]
+pub struct GetConfig<D> {
     source: Datastore,
     filter: Option<Filter>,
+    _reply: PhantomData<D>,
 }
 
-impl Operation for GetConfig {
+impl<D> Default for GetConfig<D> {
+    fn default() -> Self {
+        Self {
+            source: Datastore::default(),
+            filter: None,
+            _reply: PhantomData,
+        }
+    }
+}
+
+impl<D> Operation for GetConfig<D>
+where
+    D: ReadXml + Debug + Send + Sync,
+{
     const NAME: &'static str = "get-config";
     const REQUIRED_CAPABILITIES: Requirements = Requirements::None;
 
     type Builder<'a> = Builder<'a>;
-    type Reply = DataReply<Opaque>;
+    type Reply = DataReply<D>;
 }
 
-impl WriteXml for GetConfig {
+impl<D> WriteXml for GetConfig<D>
+where
+    D: ReadXml + Debug + Send + Sync,
+{
     fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
         writer
             .create_element(Self::NAME)
@@ -59,7 +81,10 @@ impl Builder<'_> {
     }
 }
 
-impl<'a> super::Builder<'a, GetConfig> for Builder<'a> {
+impl<'a, D> super::Builder<'a, GetConfig<D>> for Builder<'a>
+where
+    D: ReadXml + Debug + Send + Sync,
+{
     fn new(ctx: &'a Context) -> Self {
         Self {
             ctx,
@@ -68,10 +93,11 @@ impl<'a> super::Builder<'a, GetConfig> for Builder<'a> {
         }
     }
 
-    fn finish(self) -> Result<GetConfig, Error> {
+    fn finish(self) -> Result<GetConfig<D>, Error> {
         Ok(GetConfig {
-            source: self.source.require::<GetConfig>("source")?,
+            source: self.source.require::<GetConfig<D>>("source")?,
             filter: self.filter,
+            _reply: PhantomData,
         })
     }
 }
@@ -80,13 +106,13 @@ impl<'a> super::Builder<'a, GetConfig> for Builder<'a> {
 mod tests {
     use super::*;
     use crate::message::{
-        rpc::{MessageId, Request},
+        rpc::{operation::Opaque, MessageId, Request},
         ClientMsg,
     };
 
     #[test]
     fn default_request_to_xml() {
-        let req = Request {
+        let req: Request<GetConfig<Opaque>> = Request {
             message_id: MessageId(101),
             operation: GetConfig::default(),
         };

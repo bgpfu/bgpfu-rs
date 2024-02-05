@@ -47,7 +47,7 @@ mod cli;
 pub use self::cli::main;
 
 mod config;
-mod jet;
+mod netconf;
 mod task;
 
 // silence unused dev-dependency warnings

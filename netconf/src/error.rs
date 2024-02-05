@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use bytes::Bytes;
 use iri_string::types::UriStr;
 use tokio::sync::mpsc;
@@ -159,5 +161,11 @@ impl Error {
             operation_name,
             param_name,
         }
+    }
+}
+
+impl From<Infallible> for Error {
+    fn from(_: Infallible) -> Self {
+        unreachable!()
     }
 }

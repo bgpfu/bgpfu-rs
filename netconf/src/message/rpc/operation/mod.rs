@@ -1,6 +1,7 @@
 use std::{
     fmt::{self, Debug, Display},
     io::Write,
+    ops::Deref,
     sync::Arc,
 };
 
@@ -29,7 +30,7 @@ pub trait Operation: Debug + WriteXml + Send + Sync + Sized {
 
     fn new<'a, F>(ctx: &'a Context, build_fn: F) -> Result<Self, Error>
     where
-        F: Fn(Self::Builder<'a>) -> Result<Self, Error>,
+        F: FnOnce(Self::Builder<'a>) -> Result<Self, Error>,
     {
         Self::REQUIRED_CAPABILITIES
             .check(ctx.server_capabilities())
@@ -45,7 +46,7 @@ pub trait Builder<'a, O: Operation>: Debug + Sized {
 
     fn build<F>(self, build_fn: F) -> Result<O, Error>
     where
-        F: Fn(Self) -> Result<O, Error>,
+        F: FnOnce(Self) -> Result<O, Error>,
     {
         build_fn(self)
     }
@@ -246,7 +247,14 @@ impl WriteXml for Filter {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Opaque {
-    inner: Box<str>,
+    inner: Arc<str>,
+}
+
+impl<A: AsRef<str>> From<A> for Opaque {
+    fn from(value: A) -> Self {
+        let inner = value.as_ref().into();
+        Self { inner }
+    }
 }
 
 impl ReadXml for Opaque {
@@ -258,17 +266,34 @@ impl ReadXml for Opaque {
     }
 }
 
+impl WriteXml for Opaque {
+    #[tracing::instrument(skip(writer))]
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        writer
+            .get_mut()
+            .write_all(self.as_bytes())
+            .map_err(|err| WriteError::Other(err.into()))
+    }
+}
+
 impl Display for Opaque {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Display::fmt(&self.inner, f)
     }
 }
 
-impl AsRef<str> for Opaque {
-    fn as_ref(&self) -> &str {
-        self.inner.as_ref()
+impl Deref for Opaque {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
     }
 }
+// impl AsRef<str> for Opaque {
+//     fn as_ref(&self) -> &str {
+//         self.inner.as_ref()
+//     }
+// }
 
 #[derive(Debug, Clone)]
 pub struct Url {

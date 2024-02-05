@@ -13,6 +13,7 @@ use simplelog::{ColorChoice, TermLogger, TerminalMode};
 use netconf::{
     message::rpc::operation::{
         edit_config::DefaultOperation, junos, Builder, Commit, Datastore, EditConfig, GetConfig,
+        Opaque,
     },
     Session,
 };
@@ -43,14 +44,14 @@ async fn main() -> anyhow::Result<()> {
                 .finish())
             .await?,
         session
-            .rpc::<GetConfig, _>(|builder| builder.source(Datastore::Candidate)?.finish())
+            .rpc::<GetConfig<Opaque>, _>(|builder| builder.source(Datastore::Candidate)?.finish())
             .await?,
     )?;
     println!("current config:");
     println!("{existing_config}");
     let (_, candidate_config) = tokio::try_join!(
         session
-            .rpc::<EditConfig, _>(|builder| builder
+            .rpc::<EditConfig<Opaque>, _>(|builder| builder
                 .target(Datastore::Candidate)?
                 .config(
                     r#"
@@ -73,13 +74,13 @@ async fn main() -> anyhow::Result<()> {
                         </policy-options>
                     </configuration>
                 "#
-                    .to_string()
+                    .into()
                 )
                 .default_operation(DefaultOperation::Replace)
                 .finish())
             .await?,
         session
-            .rpc::<GetConfig, _>(|builder| builder.source(Datastore::Candidate)?.finish())
+            .rpc::<GetConfig<Opaque>, _>(|builder| builder.source(Datastore::Candidate)?.finish())
             .await?,
     )?;
     println!("candidate config:");

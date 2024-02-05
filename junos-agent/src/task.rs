@@ -1,4 +1,4 @@
-use std::num::NonZeroU64;
+use std::{num::NonZeroU64, sync::Arc};
 
 use anyhow::Context;
 
@@ -9,34 +9,25 @@ use tokio::{
     time::{self, Duration},
 };
 
-use crate::{config::CandidatePolicyStmts, jet::Transport};
+use crate::{
+    cli::{IrrdOpts, JunosOpts, NetconfOpts},
+    config::CandidatePolicyStmts,
+    netconf::Client,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) struct Updater {
-    jet_transport: Transport,
-    jet_username: String,
-    jet_password: String,
-    ephemeral_db_instance: String,
-    irrd_host: String,
-    irrd_port: u16,
+    netconf: Arc<NetconfOpts>,
+    irrd: Arc<IrrdOpts>,
+    junos: Arc<JunosOpts>,
 }
 
 impl Updater {
-    pub(crate) const fn new(
-        jet_transport: Transport,
-        jet_username: String,
-        jet_password: String,
-        ephemeral_db_instance: String,
-        irrd_host: String,
-        irrd_port: u16,
-    ) -> Self {
+    pub(crate) fn new(netconf: NetconfOpts, irrd: IrrdOpts, junos: JunosOpts) -> Self {
         Self {
-            jet_transport,
-            jet_username,
-            jet_password,
-            ephemeral_db_instance,
-            irrd_host,
-            irrd_port,
+            netconf: Arc::new(netconf),
+            irrd: Arc::new(irrd),
+            junos: Arc::new(junos),
         }
     }
 
@@ -48,38 +39,46 @@ impl Updater {
     }
 
     pub(crate) async fn run(self) -> anyhow::Result<()> {
-        let mut jet_client = self
-            .jet_transport
-            .connect()
-            .await?
-            .authenticate(self.jet_username, self.jet_password)
-            .await?;
+        let mut netconf_client = Client::connect(
+            self.netconf.host(),
+            self.netconf.port(),
+            self.netconf.ca_cert_path(),
+            self.netconf.client_cert_path(),
+            self.netconf.client_key_path(),
+            self.netconf.tls_server_name(),
+        )
+        .await
+        .context("failed to establish NETCONF session")?
+        .open_db(self.junos.ephemeral_db())
+        .await
+        .context("failed to open ephemeral database")?;
 
-        let candidates = jet_client
-            .get_running_config::<CandidatePolicyStmts>()
-            .await?;
+        let candidates = netconf_client
+            .get_config::<CandidatePolicyStmts>()
+            .await
+            .context("failed to get candidate policies")?;
 
         let config = tokio::task::block_in_place(|| {
-            RpslEvaluator::new(&self.irrd_host, self.irrd_port)
+            RpslEvaluator::new(self.irrd.host(), self.irrd.port())
                 .context("failed to connect to IRRd server")
                 .map(|mut evaluator| candidates.evaluate(&mut evaluator))
         })?;
 
-        jet_client
-            .clear_ephemeral_config(
-                self.ephemeral_db_instance.clone(),
-                "policy-options".to_string(),
-            )
+        netconf_client
+            .load_config(config)
             .await
-            .unwrap_or_else(|err| log::warn!("failed to clear ephemeral configuration: {err:#}"));
+            .context("failed to load configuration")?
+            .commit_config()
+            .await
+            .context("failed to commit to ephemeral database")?;
 
-        jet_client
-            .set_ephemeral_config(self.ephemeral_db_instance, config)
-            .await?;
-
-        drop(jet_client);
-
-        Ok(())
+        netconf_client
+            .close_db()
+            .await
+            .context("failed to close ephemeral database")?
+            .close()
+            .await
+            .context("failed to close NETCONF session")
     }
 }
 

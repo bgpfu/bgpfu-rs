@@ -3,7 +3,7 @@ use std::{fmt::Debug, sync::Arc};
 use async_trait::async_trait;
 use bytes::{Bytes, BytesMut};
 use memchr::memmem::Finder;
-use rustls_pki_types::{CertificateDer, InvalidDnsNameError, PrivateKeyDer, ServerName};
+use rustls_pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
     net::{TcpStream, ToSocketAddrs},
@@ -34,7 +34,8 @@ impl Tls {
     ) -> Result<Self, Error>
     where
         A: ToSocketAddrs + Debug + Send,
-        S: TryInto<ServerName<'static>, Error = InvalidDnsNameError> + Debug + Send,
+        S: TryInto<ServerName<'static>> + Debug + Send,
+        Error: From<S::Error>,
     {
         let root_store = {
             let mut store = RootCertStore::empty();

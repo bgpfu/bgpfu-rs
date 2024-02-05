@@ -13,8 +13,6 @@ pub(crate) mod write;
 pub(crate) struct PolicyStmt<C: RouteFilterContent> {
     name: String,
     filter_expr: MpFilterExpr,
-    // TODO: honour 'inactive' state
-    // active: bool,
     content: C,
 }
 

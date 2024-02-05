@@ -13,24 +13,22 @@ categories.workspace = true
 [[bin]]
 name = "bgpfu-junos-agent"
 
-[features]
-default = ["junos-23-1"]
-junos-23-1 = ["juniper-jet/junos-23-1"]
-
 [dependencies]
 anyhow.workspace = true
 bgpfu-lib.workspace = true
+bgpfu-netconf = { workspace = true, features = ["junos"] }
 clap.workspace = true
 clap-verbosity-flag.workspace = true
 generic-ip.workspace = true
+# TODO: swap out for tracing
 log.workspace = true
-juniper-jet.workspace = true
+quick-xml.workspace = true
 rpsl.workspace = true
+rustls-pemfile.workspace = true
+rustls-pki-types.workspace = true
 simplelog.workspace = true
+tracing.workspace = true
 tokio.workspace = true
-tonic.workspace = true
-tower.workspace = true
-xmhell.workspace = true
 
 [dev-dependencies]
 version-sync.workspace = true
