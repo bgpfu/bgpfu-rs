@@ -26,6 +26,8 @@ jobs:
     with:
       toolchain: ${{ matrix.toolchain }}
       args: ${{ matrix.args }}
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   publish-lib:
     name: publish-lib
@@ -34,7 +36,7 @@ jobs:
     needs:
       - lint
       - test
-    uses: wolcomm/.github/.github/workflows/rust-publish.yml@explicit-package
+    uses: wolcomm/.github/.github/workflows/rust-publish.yml@master
     with:
       package: bgpfu-lib
     secrets:
@@ -46,7 +48,7 @@ jobs:
             startsWith(github.ref, 'refs/tag') }}
     needs:
       - publish-lib
-    uses: wolcomm/.github/.github/workflows/rust-publish.yml@explicit-package
+    uses: wolcomm/.github/.github/workflows/rust-publish.yml@master
     with:
       package: bgpfu-cli
     secrets:
