@@ -1,3 +1,0 @@
-[target.x86_64-unknown-freebsd]
-image = "ghcr.io/cross-rs/x86_64-unknown-freebsd:main"
-pre-build = ["apt install -qy protobuf-compiler"]
