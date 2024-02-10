@@ -16,9 +16,9 @@ name = "bgpfu"
 [dependencies]
 generic-ip.workspace = true
 irrc.workspace = true
-log.workspace = true
 rpsl.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 version-sync.workspace = true

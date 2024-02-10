@@ -20,8 +20,6 @@ bgpfu-netconf = { workspace = true, features = ["junos"] }
 clap.workspace = true
 clap-verbosity-flag.workspace = true
 generic-ip.workspace = true
-# TODO: swap out for tracing
-log.workspace = true
 quick-xml.workspace = true
 rpsl.workspace = true
 rustls-pemfile.workspace = true

@@ -23,7 +23,6 @@ clap = {version = "^4.0", features = ["derive"]}
 clap-verbosity-flag = "^2.0"
 generic-ip = "^0.1"
 irrc = "0.1.0-rc.6"
-log = "^0.4"
 quick-xml = "^0.31"
 rpsl = "^0.1"
 rustls-pemfile = "^2.0"

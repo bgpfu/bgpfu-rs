@@ -89,7 +89,7 @@ pub(crate) struct Loop {
 
 impl Loop {
     pub(crate) async fn start(self) -> anyhow::Result<()> {
-        log::info!("starting updater loop with frequency {:?}", self.period);
+        tracing::info!("starting updater loop with frequency {:?}", self.period);
         let mut interval = time::interval(self.period);
         let mut sigint =
             signal(SignalKind::interrupt()).context("failed to register handler for SIGINT")?;
@@ -98,24 +98,24 @@ impl Loop {
         loop {
             tokio::select! {
                 _ = sigint.recv() => {
-                    log::info!("got ctrl-c, exiting");
+                    tracing::info!("got ctrl-c, exiting");
                     break Ok(())
                 }
                 _ = sigterm.recv() => {
-                    log::info!("got SIGTERM, exiting");
+                    tracing::info!("got SIGTERM, exiting");
                     break Ok(())
                 }
                 _ = interval.tick() => {
-                    log::info!("starting updater job");
+                    tracing::info!("starting updater job");
                     let job = self.updater.clone().run();
                     tokio::spawn(job)
                         .await
                         .unwrap_or_else(|err| {
-                            log::error!("updater thread panicked: {err}");
+                            tracing::error!("updater thread panicked: {err}");
                             Ok(())
                         })
                         .unwrap_or_else(|err| {
-                            log::error!("updater job failed: {err:#}");
+                            tracing::error!("updater job failed: {err:#}");
                         });
                     interval.reset();
                 }

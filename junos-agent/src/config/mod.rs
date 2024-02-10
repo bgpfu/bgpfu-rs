@@ -49,7 +49,7 @@ impl CandidatePolicyStmts {
                     match evaluator.evaluate(candidate.filter_expr.clone()) {
                         Ok(set) => Some(set),
                         Err(err) => {
-                            log::error!(
+                            tracing::error!(
                                 "failed to evaluate filter expression {}: {err:#}",
                                 candidate.filter_expr,
                             );
