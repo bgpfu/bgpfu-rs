@@ -30,6 +30,7 @@ in
       baseArgs = {
         inherit pname src;
         strictDeps = true;
+        doCheck = true;
         cargoExtraArgs = "--bin ${bin}";
         meta = {
           inherit (manifest.workspace.package) description;
