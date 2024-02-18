@@ -147,10 +147,16 @@ impl NetconfOpts {
     }
 }
 
+const DEFAULT_LOGGING_DEST: &str = if cfg!(target_platform = "junos-freebsd") {
+    "/var/log/bgpfu-junos-agent.log"
+} else {
+    "STDERR"
+};
+
 #[derive(Debug, Args)]
 struct LoggingOpts {
     /// Logging output destination
-    #[arg(short = 'l', long, default_value = "/var/log/bgpfu-junos-agent.log")]
+    #[arg(short = 'l', long, default_value = DEFAULT_LOGGING_DEST)]
     logging_dest: LoggingDest,
 
     #[command(flatten)]
