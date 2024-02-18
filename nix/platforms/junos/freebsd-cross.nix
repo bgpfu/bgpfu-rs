@@ -1,34 +1,34 @@
 { pkgs }:
 with pkgs;
 let
-  freebsd-arch = "amd64";
-  freebsd-major = 12;
-  freebsd-minor = 4;
+  freebsdArch = "amd64";
+  freebsdMajor = 12;
+  freebsdMinor = 4;
 
-  target-arch = "x86_64";
-  rust-target = "${target-arch}-unknown-freebsd";
-  gnu-target = "${rust-target}${toString freebsd-major}";
+  targetArch = "x86_64";
+  rustTarget = "${targetArch}-unknown-freebsd";
+  gnuTarget = "${rustTarget}${toString freebsdMajor}";
 
   binutils = stdenv.mkDerivation
     rec {
-      pname = "binutils-${gnu-target}";
+      pname = "binutils-${gnuTarget}";
       version = "2.32";
       src = fetchzip {
         url = "https://ftp.gnu.org/gnu/binutils/binutils-${version}.tar.gz";
         hash = "sha256-LUvvkE9/7fSrSFDBOqghKSQbLjWhKGXLUacpySHMwdY=";
       };
       enableParallelBuilding = true;
-      configureFlags = [ "--target=${gnu-target}" ];
+      configureFlags = [ "--target=${gnuTarget}" ];
     };
 
   gcc =
     let
       freebsd-base =
         let
-          version = "${toString freebsd-major}.${toString freebsd-minor}";
+          version = "${toString freebsdMajor}.${toString freebsdMinor}";
         in
         fetchzip {
-          url = "https://ftp.freebsd.org/pub/FreeBSD/releases/${freebsd-arch}/${version}-RELEASE/base.txz";
+          url = "https://ftp.freebsd.org/pub/FreeBSD/releases/${freebsdArch}/${version}-RELEASE/base.txz";
           hash = "sha256-5UIyd6oZjBzcnC2E4MFftocorQfnIpbwAgZt0dhIDXE=";
           stripRoot = false;
         };
@@ -55,7 +55,7 @@ let
     in
     stdenv.mkDerivation
       rec {
-        pname = "gcc-${gnu-target}";
+        pname = "gcc-${gnuTarget}";
         version = "6.4.0";
         src = fetchzip {
           url = "https://ftp.gnu.org/gnu/gcc/gcc-${version}/gcc-${version}.tar.gz";
@@ -85,14 +85,12 @@ let
           "--disable-lto"
           "--disable-nls"
           "--enable-languages=c,c++"
-          "--target=${gnu-target}"
+          "--target=${gnuTarget}"
           "--with-sysroot=${freebsd-base}"
         ];
-        passthru.linker = "${gnu-target}-gcc";
+        passthru.linker = "${gnuTarget}-gcc";
       };
 in
 {
-      depsBuildBuild = [ binutils gcc ];
-      CARGO_BUILD_TARGET = rust-target;
-      CARGO_TARGET_X86_64_UNKNOWN_FREEBSD_LINKER = gcc.linker;
+  inherit rustTarget binutils gcc;
 }
