@@ -19,15 +19,11 @@ use crate::config::{read::ReadConfig, write::WriteConfig};
 mod pem;
 use self::pem::{read_cert, read_private_key};
 
-trait DbState {}
-
 #[derive(Debug)]
 pub(crate) enum Closed {}
-impl DbState for Closed {}
 
 #[derive(Debug)]
 pub(crate) enum Open {}
-impl DbState for Open {}
 
 #[derive(Debug)]
 pub(crate) struct Client<S> {
@@ -36,7 +32,7 @@ pub(crate) struct Client<S> {
 }
 
 impl Client<Closed> {
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn connect(
         host: &str,
         port: u16,
@@ -45,7 +41,9 @@ impl Client<Closed> {
         client_key_path: &Path,
         server_name: Option<ServerName<'static>>,
     ) -> anyhow::Result<Self> {
+        tracing::debug!("trying to connect to NETCONF server at '{host}:{port}'");
         let addr = (host, port);
+        tracing::debug!(?ca_cert_path, ?client_cert_path, ?client_key_path);
         let (ca_cert, client_cert, client_key) = tokio::try_join!(
             read_cert(ca_cert_path),
             read_cert(client_cert_path),
@@ -64,8 +62,9 @@ impl Client<Closed> {
             })
     }
 
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(skip(self), level = "debug")]
     pub(crate) async fn open_db(mut self, name: &str) -> anyhow::Result<Client<Open>> {
+        tracing::debug!("trying to open ephemeral database");
         self.session
             .rpc::<OpenConfiguration, _>(|builder| builder.ephemeral(Some(name)).finish())
             .await
@@ -78,8 +77,9 @@ impl Client<Closed> {
         })
     }
 
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(skip(self), level = "debug")]
     pub(crate) async fn close(self) -> anyhow::Result<()> {
+        tracing::debug!("closing NETCONF session");
         self.session
             .close()
             .await
@@ -90,11 +90,12 @@ impl Client<Closed> {
 }
 
 impl Client<Open> {
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(skip(self), level = "debug")]
     pub(crate) async fn get_config<T>(&mut self) -> anyhow::Result<T>
     where
         T: ReadConfig,
     {
+        tracing::debug!("trying to read running configuration");
         self.session
             .rpc::<GetConfig<T>, _>(|builder| {
                 builder
@@ -108,11 +109,12 @@ impl Client<Open> {
             .context("failed to retreive running configuration")
     }
 
-    #[tracing::instrument(skip(config), level = "debug")]
+    #[tracing::instrument(skip(self, config), level = "debug")]
     pub(crate) async fn load_config<T>(&mut self, config: T) -> anyhow::Result<&mut Self>
     where
         T: WriteConfig,
     {
+        tracing::debug!("trying to load candidate configuration");
         tracing::trace!(?config);
         self.session
             .rpc::<EditConfig<T>, _>(|builder| {
@@ -130,8 +132,9 @@ impl Client<Open> {
     }
 
     #[allow(clippy::redundant_closure_for_method_calls)]
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(skip(self), level = "debug")]
     pub(crate) async fn commit_config(&mut self) -> anyhow::Result<()> {
+        tracing::debug!("trying to commit candidate configuration");
         self.session
             .rpc::<Commit, _>(|builder| builder.finish())
             .await
@@ -141,8 +144,9 @@ impl Client<Open> {
     }
 
     #[allow(clippy::redundant_closure_for_method_calls)]
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(skip(self), level = "debug")]
     pub(crate) async fn close_db(mut self) -> anyhow::Result<Client<Closed>> {
+        tracing::debug!("trying to close candidate configuration");
         self.session
             .rpc::<CloseConfiguration, _>(|builder| builder.finish())
             .await

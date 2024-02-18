@@ -29,7 +29,7 @@ impl Capabilities {
         self.inner.iter()
     }
 
-    #[tracing::instrument(ret, level = "debug")]
+    #[tracing::instrument(skip(self), ret, level = "debug")]
     fn contains(&self, elem: &Capability) -> bool {
         self.inner.contains(elem)
     }
@@ -53,7 +53,7 @@ impl Capabilities {
 }
 
 impl ReadXml for Capabilities {
-    #[tracing::instrument(skip(reader))]
+    #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "debug")]
     fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let mut inner = HashSet::new();
         let end = start.to_end();
@@ -63,6 +63,7 @@ impl ReadXml for Capabilities {
                     if ns == xmlns::BASE && tag.local_name().as_ref() == b"capability" =>
                 {
                     let span = reader.read_text(tag.to_end().name())?;
+                    tracing::debug!(?span, "parsing capability");
                     _ = inner.insert(span.parse()?);
                 }
                 (_, Event::End(tag)) if tag == end => break,
@@ -276,6 +277,7 @@ pub enum Requirements {
 }
 
 impl Requirements {
+    #[tracing::instrument(skip(capabilities), level = "debug")]
     pub(crate) fn check(&self, capabilities: &Capabilities) -> bool {
         match self {
             Self::None => true,

@@ -30,7 +30,7 @@ const JCMD: Namespace<'_> = Namespace(b"http://yang.juniper.net/junos/jcmd");
 struct MaybePolicyStmt(Option<PolicyStmt<Empty>>);
 
 impl ReadXml for MaybePolicyStmt {
-    #[tracing::instrument(skip(reader))]
+    #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "debug")]
     fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
         let mut maybe_filter_expr = None;
@@ -44,6 +44,7 @@ impl ReadXml for MaybePolicyStmt {
                 (ResolveResult::Bound(JCMD), name)
                     if name.as_ref() == b"active" && attr.unescape_value()? == "false" =>
                 {
+                    tracing::debug!("skipping inactive policy-statement");
                     _ = reader.read_to_end(end.name())?;
                     return Ok(Self(None));
                 }
@@ -128,7 +129,7 @@ impl ReadXml for MaybePolicyStmt {
 }
 
 impl ReadXml for CandidatePolicyStmts {
-    #[tracing::instrument(skip(reader))]
+    #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "debug")]
     fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
         let mut outer = None;

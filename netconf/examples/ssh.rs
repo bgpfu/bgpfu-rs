@@ -1,7 +1,9 @@
-use anyhow::Context;
+use std::io::stderr;
+
+use anyhow::{anyhow, Context};
 use clap::Parser;
 use clap_verbosity_flag::{Verbosity, WarnLevel};
-use simplelog::{ColorChoice, TermLogger, TerminalMode};
+use tracing_log::AsTrace as _;
 
 use netconf::{
     message::rpc::operation::{Builder, Datastore, Filter, GetConfig, Opaque},
@@ -12,13 +14,11 @@ use netconf::{
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
-    TermLogger::init(
-        args.verbosity.log_level_filter(),
-        Default::default(),
-        TerminalMode::Stderr,
-        ColorChoice::Auto,
-    )
-    .context("failed to init logger")?;
+    tracing_subscriber::fmt()
+        .with_max_level(args.verbosity.log_level_filter().as_trace())
+        .with_writer(stderr)
+        .try_init()
+        .map_err(|err| anyhow!(err))?;
     let addr = (args.host.as_str(), args.port);
     let mut session = Session::ssh(addr, args.username, args.password)
         .await

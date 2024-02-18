@@ -58,7 +58,7 @@ pub struct Error {
 }
 
 impl ReadXml for Error {
-    #[tracing::instrument(skip(reader))]
+    #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "debug")]
     fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
         let mut error_type = None;
@@ -381,7 +381,7 @@ impl Info {
 }
 
 impl ReadXml for Info {
-    #[tracing::instrument(skip(reader))]
+    #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "debug")]
     fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
         let mut inner = Vec::new();

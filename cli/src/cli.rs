@@ -2,13 +2,13 @@ use bgpfu::RpslEvaluator;
 
 use clap::Parser;
 
-use clap_verbosity_flag::Verbosity;
+use clap_verbosity_flag::{Verbosity, WarnLevel};
 
 use ip::traits::PrefixSet as _;
 
 use rpsl::expr::MpFilterExpr;
 
-use simplelog::{ColorChoice, TermLogger, TerminalMode};
+use tracing_log::AsTrace;
 
 use crate::Format;
 
@@ -16,12 +16,11 @@ use crate::Format;
 #[allow(clippy::missing_errors_doc)]
 pub fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
-    TermLogger::init(
-        args.verbosity.log_level_filter(),
-        simplelog::Config::default(),
-        TerminalMode::Stderr,
-        ColorChoice::Auto,
-    )?;
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .with_max_level(args.verbosity.log_level_filter().as_trace())
+        .try_init()
+        .map_err(|err| anyhow::anyhow!(err))?;
     RpslEvaluator::new(args.host(), args.port())?
         .evaluate(args.filter())?
         .ranges()
@@ -42,7 +41,7 @@ struct Cli {
     port: u16,
 
     #[command(flatten)]
-    verbosity: Verbosity,
+    verbosity: Verbosity<WarnLevel>,
 
     /// Output format.
     #[arg(short, long, value_enum, default_value_t = Format::Plain)]

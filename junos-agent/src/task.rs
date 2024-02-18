@@ -23,6 +23,7 @@ pub(crate) struct Updater {
 }
 
 impl Updater {
+    #[tracing::instrument(level = "debug")]
     pub(crate) fn new(netconf: NetconfOpts, irrd: IrrdOpts, junos: JunosOpts) -> Self {
         Self {
             netconf: Arc::new(netconf),
@@ -31,6 +32,7 @@ impl Updater {
         }
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     pub(crate) fn init_loop(self, frequency: NonZeroU64) -> Loop {
         Loop {
             updater: self,
@@ -38,7 +40,10 @@ impl Updater {
         }
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     pub(crate) async fn run(self) -> anyhow::Result<()> {
+        tracing::info!("starting update");
+
         let mut netconf_client = Client::connect(
             self.netconf.host(),
             self.netconf.port(),
@@ -58,11 +63,15 @@ impl Updater {
             .await
             .context("failed to get candidate policies")?;
 
+        tracing::info!("found {} candidate policy statements", candidates.len());
+
         let config = tokio::task::block_in_place(|| {
             RpslEvaluator::new(self.irrd.host(), self.irrd.port())
                 .context("failed to connect to IRRd server")
                 .map(|mut evaluator| candidates.evaluate(&mut evaluator))
         })?;
+
+        tracing::info!("successfully evaluated {} policy statements", config.len());
 
         netconf_client
             .load_config(config)
@@ -78,7 +87,10 @@ impl Updater {
             .context("failed to close ephemeral database")?
             .close()
             .await
-            .context("failed to close NETCONF session")
+            .context("failed to close NETCONF session")?;
+
+        tracing::info!("policies successfully updated");
+        Ok(())
     }
 }
 
@@ -88,6 +100,7 @@ pub(crate) struct Loop {
 }
 
 impl Loop {
+    #[tracing::instrument(skip(self), level = "trace")]
     pub(crate) async fn start(self) -> anyhow::Result<()> {
         tracing::info!("starting updater loop with frequency {:?}", self.period);
         let mut interval = time::interval(self.period);

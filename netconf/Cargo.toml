@@ -38,7 +38,8 @@ anyhow.workspace = true
 clap.workspace = true
 clap-verbosity-flag.workspace = true
 rustls-pemfile.workspace = true
-simplelog.workspace = true
+tracing-log.workspace = true
+tracing-subscriber.workspace = true
 version-sync.workspace = true
 
 [[example]]

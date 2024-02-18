@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use ip::{Any, Prefix, PrefixSet};
 
 use irrc::{Connection, IrrClient, Query, ResponseItem};
@@ -43,6 +45,7 @@ impl RpslEvaluator {
     /// # Errors
     ///
     /// An [`Error::Irr`] is returned if the connection to the IRRd server cannot be established.
+    #[tracing::instrument(level = "debug")]
     pub fn new(host: &str, port: u16) -> Result<Self, Error> {
         let addr = format!("{host}:{port}");
         let conn = IrrClient::new(addr).connect()?;
@@ -68,13 +71,15 @@ impl RpslEvaluator {
     /// # Errors
     ///
     /// See [`Evaluator`] for error handling details.
+    #[tracing::instrument(skip(self, expr), fields(%expr), level = "debug")]
     pub fn evaluate<'a, T>(
         &mut self,
         expr: T,
     ) -> Result<<Self as Evaluator<'a>>::Output<T>, <Self as Evaluator<'a>>::Error>
     where
-        T: Evaluate<'a, Self>,
+        T: Evaluate<'a, Self> + Display,
     {
+        tracing::info!("evaluating RPSL mp-filter expression '{expr}'");
         <Self as Evaluator>::evaluate(self, expr)
     }
 }
@@ -94,7 +99,15 @@ impl<'a> Evaluator<'a> for RpslEvaluator {
     }
 
     fn sink_error(&mut self, err: &(dyn std::error::Error + Send + Sync + 'static)) -> bool {
-        tracing::warn!("foobar! {err:#}");
+        if let Some(irrc::Error::ResponseErr(
+            Query::Ipv4Routes(_) | Query::Ipv6Routes(_),
+            irrc::error::Response::KeyNotFound,
+        )) = err.downcast_ref()
+        {
+            tracing::debug!("{err:#}");
+        } else {
+            tracing::warn!("{err:#}");
+        }
         true
     }
 }
@@ -102,6 +115,7 @@ impl<'a> Evaluator<'a> for RpslEvaluator {
 impl Resolver<'_, FilterSet, MpFilterExpr> for RpslEvaluator {
     type IError = Error;
 
+    #[tracing::instrument(skip(self), level = "debug")]
     fn resolve(&mut self, filter_set: &FilterSet) -> Result<MpFilterExpr, Self::IError> {
         self.with_connection(|this, conn| {
             conn.pipeline()
@@ -148,6 +162,7 @@ impl Resolver<'_, FilterSet, MpFilterExpr> for RpslEvaluator {
 impl Resolver<'_, AsSet, PrefixSet<Any>> for RpslEvaluator {
     type IError = Error;
 
+    #[tracing::instrument(skip(self), fields(%as_set), level = "debug")]
     fn resolve(&mut self, as_set: &AsSet) -> Result<PrefixSet<Any>, Self::IError> {
         self.with_connection(|this, conn| {
             // TODO: shouldn't need to clone here
@@ -176,6 +191,7 @@ impl Resolver<'_, AsSet, PrefixSet<Any>> for RpslEvaluator {
 impl Resolver<'_, RouteSet, PrefixSet<Any>> for RpslEvaluator {
     type IError = Error;
 
+    #[tracing::instrument(skip(self), level = "debug")]
     fn resolve(&mut self, route_set: &RouteSet) -> Result<PrefixSet<Any>, Self::IError> {
         self.with_connection(|this, conn| {
             conn.pipeline()
@@ -196,6 +212,7 @@ impl Resolver<'_, RouteSet, PrefixSet<Any>> for RpslEvaluator {
 impl Resolver<'_, AutNum, PrefixSet<Any>> for RpslEvaluator {
     type IError = Error;
 
+    #[tracing::instrument(skip(self), fields(%autnum), level = "debug")]
     fn resolve(&mut self, autnum: &AutNum) -> Result<PrefixSet<Any>, Self::IError> {
         self.with_connection(|this, conn| {
             conn.pipeline()
@@ -216,6 +233,7 @@ impl Resolver<'_, AutNum, PrefixSet<Any>> for RpslEvaluator {
 impl Resolver<'_, PeerAs, PrefixSet<Any>> for RpslEvaluator {
     type IError = Error;
 
+    #[tracing::instrument(skip(self), level = "debug")]
     fn resolve(&mut self, _: &PeerAs) -> Result<PrefixSet<Any>, Self::IError> {
         unimplemented!()
     }

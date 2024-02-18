@@ -119,10 +119,11 @@ pub enum BareReply {
 }
 
 impl ReadXml for BareReply {
+    #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "debug")]
     fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
         let mut errors = Errors::new();
-        tracing::debug!("expecting <ok> or <rpc-error>");
+        tracing::debug!("checking for <rpc-error>");
         loop {
             match reader.read_resolved_event()? {
                 (ResolveResult::Bound(ns), Event::Start(tag))

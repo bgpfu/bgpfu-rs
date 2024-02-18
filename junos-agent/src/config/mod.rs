@@ -37,15 +37,28 @@ impl RouteFilterContent for PrefixSet {}
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub(crate) struct EvaluatedPolicyStmts(Vec<PolicyStmt<PrefixSet>>);
 
+impl EvaluatedPolicyStmts {
+    pub(crate) fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub(crate) struct CandidatePolicyStmts(Vec<PolicyStmt<Empty>>);
 
 impl CandidatePolicyStmts {
+    #[tracing::instrument(skip(evaluator), level = "trace")]
     pub(crate) fn evaluate(self, evaluator: &mut RpslEvaluator) -> EvaluatedPolicyStmts {
+        tracing::debug!("trying to evaluate {} candidate policies", self.len());
         EvaluatedPolicyStmts(
             self.0
                 .into_iter()
                 .filter_map(|candidate| {
+                    tracing::debug!(
+                        %candidate.name,
+                        %candidate.filter_expr,
+                        "trying to evaluate filter expression"
+                    );
                     match evaluator.evaluate(candidate.filter_expr.clone()) {
                         Ok(set) => Some(set),
                         Err(err) => {
@@ -64,5 +77,9 @@ impl CandidatePolicyStmts {
                 })
                 .collect(),
         )
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.0.len()
     }
 }

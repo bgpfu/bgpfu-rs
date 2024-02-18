@@ -258,7 +258,7 @@ impl<A: AsRef<str>> From<A> for Opaque {
 }
 
 impl ReadXml for Opaque {
-    #[tracing::instrument(skip(reader))]
+    #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "debug")]
     fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
         let inner = reader.read_text(end.name())?.into();

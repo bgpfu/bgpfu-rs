@@ -66,6 +66,7 @@ mod deps {
     use clap as _;
     use clap_verbosity_flag as _;
     use rustls_pemfile as _;
-    use simplelog as _;
+    use tracing_log as _;
+    use tracing_subscriber as _;
     use version_sync as _;
 }

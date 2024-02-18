@@ -89,7 +89,6 @@ impl ServerMsg for PartialReply {
     where
         S: AsRef<str> + Debug,
     {
-        tracing::debug!(?input);
         let mut reader = NsReader::from_str(input.as_ref());
         _ = reader.trim_text(true);
         Self::read_xml(&mut reader, &BytesStart::new("dummy"))
@@ -97,7 +96,7 @@ impl ServerMsg for PartialReply {
 }
 
 impl ReadXml for PartialReply {
-    #[tracing::instrument(skip(reader))]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn read_xml(reader: &mut NsReader<&[u8]>, _: &BytesStart<'_>) -> Result<Self, ReadError> {
         let buf = from_utf8(reader.get_ref())?.into();
         tracing::debug!("expecting <{}>", Self::TAG_NAME);
@@ -145,7 +144,7 @@ impl<O: Operation> Reply<O> {
 }
 
 impl<O: Operation> ReadXml for Reply<O> {
-    #[tracing::instrument(skip(reader))]
+    #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "debug")]
     fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         tracing::debug!("trying to parse message-id");
         let message_id = start
@@ -165,7 +164,7 @@ impl<O: Operation> ServerMsg for Reply<O> {
 impl<O: Operation> TryFrom<PartialReply> for Reply<O> {
     type Error = ReadError;
 
-    #[tracing::instrument(err, level = "debug")]
+    #[tracing::instrument(skip(value), level = "debug")]
     fn try_from(value: PartialReply) -> Result<Self, Self::Error> {
         let this = Self::from_xml(&value.buf)?;
         if this.message_id != value.message_id {
@@ -190,7 +189,7 @@ pub enum EmptyReply {
 }
 
 impl ReadXml for EmptyReply {
-    #[tracing::instrument(skip(reader))]
+    #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "debug")]
     fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
         let mut errors = Errors::new();
@@ -245,7 +244,7 @@ pub enum DataReply<D> {
 }
 
 impl<D: ReadXml> ReadXml for DataReply<D> {
-    #[tracing::instrument(skip(reader))]
+    #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "debug")]
     fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
         let mut errors = Errors::new();
@@ -413,6 +412,7 @@ mod tests {
     struct BarReply(usize);
 
     impl ReadXml for BarReply {
+        #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "debug")]
         fn read_xml(
             reader: &mut NsReader<&[u8]>,
             start: &BytesStart<'_>,

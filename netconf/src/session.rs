@@ -123,7 +123,7 @@ enum OutstandingRequest {
 }
 
 impl OutstandingRequest {
-    #[tracing::instrument(level = "debug")]
+    #[tracing::instrument(level = "trace")]
     fn take(&mut self) -> Result<Option<rpc::PartialReply>, Error> {
         match mem::replace(self, Self::Complete) {
             mut pending @ Self::Pending => {
@@ -138,7 +138,7 @@ impl OutstandingRequest {
 
 impl Session<Ssh> {
     /// Establish a new NETCONF session over an SSH transport.
-    #[tracing::instrument]
+    #[tracing::instrument(level = "debug")]
     pub async fn ssh<A>(addr: A, username: String, password: Password) -> Result<Self, Error>
     where
         A: ToSocketAddrs + Send + Debug,
@@ -151,7 +151,7 @@ impl Session<Ssh> {
 
 impl Session<Tls> {
     /// Establish a new NETCONF session over a TLS transport.
-    #[tracing::instrument]
+    #[tracing::instrument(skip(ca_cert, client_cert, client_key), level = "debug")]
     pub async fn tls<A, S>(
         addr: A,
         server_name: S,
@@ -171,6 +171,7 @@ impl Session<Tls> {
 }
 
 impl<T: Transport> Session<T> {
+    #[tracing::instrument(skip(transport), level = "trace")]
     async fn new(transport: T) -> Result<Self, Error> {
         let client_hello = ClientHello::default();
         let (mut tx, mut rx) = transport.split();
@@ -228,7 +229,7 @@ impl<T: Transport> Session<T> {
     /// session/transport error while receiving the `<rpc-reply>` message, an error parsing the
     /// received XML, or one-or-more application layer errors returned by the NETCONF server. The
     /// latter case may be identified by matching on the [`Error::RpcError`] variant.
-    #[tracing::instrument(skip(self, build_fn))]
+    #[tracing::instrument(skip(self, build_fn), level = "debug")]
     pub async fn rpc<O, F>(
         &mut self,
         build_fn: F,
@@ -284,7 +285,7 @@ impl<T: Transport> Session<T> {
     }
 
     /// Close the NETCONF session gracefully using the `<close-session>` RPC operation.
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn close(mut self) -> Result<impl Future<Output = Result<(), Error>>, Error> {
         self.rpc::<CloseSession, _>(Builder::finish)
             .await

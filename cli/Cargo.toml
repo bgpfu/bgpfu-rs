@@ -20,7 +20,8 @@ clap.workspace = true
 clap-verbosity-flag.workspace = true
 generic-ip.workspace = true
 rpsl.workspace = true
-simplelog.workspace = true
+tracing-log.workspace = true
+tracing-subscriber.workspace = true
 
 [dev-dependencies]
 version-sync.workspace = true

@@ -34,6 +34,7 @@ pub trait WriteXml {
 
 #[async_trait]
 pub trait ClientMsg: WriteXml + Debug {
+    #[tracing::instrument(skip(self), level = "debug")]
     fn to_xml(&self) -> Result<String, WriteError> {
         let mut buf = Vec::new();
         let mut writer = Writer::new(&mut buf);
@@ -42,9 +43,11 @@ pub trait ClientMsg: WriteXml + Debug {
         Ok(String::from_utf8(buf)?)
     }
 
-    #[tracing::instrument(skip(sender), err, level = "debug")]
+    #[tracing::instrument(skip(self, sender), level = "trace")]
     async fn send<T: SendHandle>(&self, sender: &mut T) -> Result<(), Error> {
+        tracing::debug!("sending message");
         let serialized = self.to_xml()?;
+        tracing::debug!(serialized);
         sender.send(serialized.into()).await
     }
 }
@@ -54,12 +57,12 @@ pub trait ServerMsg: ReadXml {
     const TAG_NS: Namespace<'static>;
     const TAG_NAME: &'static str;
 
-    #[tracing::instrument(skip(input))]
+    #[tracing::instrument(skip(input), level = "debug")]
     fn from_xml<S>(input: S) -> Result<Self, ReadError>
     where
         S: AsRef<str> + Debug,
     {
-        tracing::debug!(?input);
+        tracing::debug!(input = input.as_ref());
         let mut reader = NsReader::from_str(input.as_ref());
         _ = reader.trim_text(true);
         tracing::debug!("expecting <{}>", Self::TAG_NAME);
@@ -86,8 +89,9 @@ pub trait ServerMsg: ReadXml {
         this.ok_or_else(|| ReadError::missing_element(Self::TAG_NAME, Self::TAG_NAME))
     }
 
-    #[tracing::instrument(skip(receiver), err)]
+    #[tracing::instrument(skip(receiver), level = "trace")]
     async fn recv<T: RecvHandle>(receiver: &mut T) -> Result<Self, Error> {
+        tracing::debug!("receiving message");
         let bytes = receiver.recv().await?;
         let serialized = from_utf8(&bytes).map_err(ReadError::DecodeMessage)?;
         Ok(Self::from_xml(serialized)?)

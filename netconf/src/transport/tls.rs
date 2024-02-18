@@ -24,7 +24,7 @@ pub struct Tls {
 }
 
 impl Tls {
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn connect<A, S>(
         addr: A,
         server_name: S,
@@ -47,6 +47,7 @@ impl Tls {
                 .with_root_certificates(root_store)
                 .with_client_auth_cert(vec![client_cert], client_key)?,
         );
+        tracing::debug!(?config);
         let domain = server_name.try_into()?;
         let tcp_stream = TcpStream::connect(addr).await?;
         let stream = TlsConnector::from(config)

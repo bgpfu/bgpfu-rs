@@ -1,17 +1,16 @@
-use std::fs::File;
 use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::{fmt, path::Path};
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 
 use clap::{Args, Parser};
 
 use clap_verbosity_flag::{Verbosity, WarnLevel};
 
 use rustls_pki_types::ServerName;
-use simplelog::{ColorChoice, TermLogger, TerminalMode, WriteLogger};
+use tracing_log::AsTrace;
 
 use crate::task::Updater;
 
@@ -160,22 +159,25 @@ struct LoggingOpts {
 
 impl LoggingOpts {
     fn init(self) -> anyhow::Result<()> {
-        let level = self.verbosity.log_level_filter();
-        let config = simplelog::Config::default();
-        match self.logging_dest {
-            LoggingDest::File(ref path) => File::options()
-                .create(true)
-                .append(true)
-                .open(path)
-                .context("failed to open log file '{path.display()}'")
-                .and_then(|file| {
-                    WriteLogger::init(level, config, file).context("failed to initialize logger")
-                }),
-            LoggingDest::StdErr => {
-                TermLogger::init(level, config, TerminalMode::Stderr, ColorChoice::Auto)
-                    .context("failed to initialize logger")
-            }
-        }
+        let level = self.verbosity.log_level_filter().as_trace();
+        // TODO:
+        // let (writer, _guard) = match self.logging_dest {
+        //     LoggingDest::File(ref path) => {
+        //         let canonical = path.canonicalize()?;
+        //         let writer = tracing_appender::rolling::daily(
+        //             canonical.parent().unwrap(),
+        //             canonical.file_name().unwrap(),
+        //         );
+        //         tracing_appender::non_blocking(writer)
+        //     }
+        //     LoggingDest::StdErr => tracing_appender::non_blocking(std::io::stderr()),
+        // };
+        tracing_subscriber::fmt()
+            .with_max_level(level)
+            // .with_writer(writer)
+            .with_writer(std::io::stderr)
+            .try_init()
+            .map_err(|err| anyhow!(err))
     }
 }
 

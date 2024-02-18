@@ -30,7 +30,7 @@ impl ServerHello {
 }
 
 impl ReadXml for ServerHello {
-    #[tracing::instrument(skip(reader))]
+    #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "debug")]
     fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
         let (mut capabilities, mut session_id) = (None, None);
@@ -42,16 +42,19 @@ impl ReadXml for ServerHello {
                         && tag.local_name().as_ref() == b"capabilities"
                         && capabilities.is_none() =>
                 {
-                    tracing::debug!("trying to deserialize capabilities");
                     capabilities = Some(Capabilities::read_xml(reader, &tag)?);
+                    tracing::debug!(?capabilities);
                 }
                 (ResolveResult::Bound(ns), Event::Start(tag))
                     if ns == xmlns::BASE
                         && tag.local_name().as_ref() == b"session-id"
                         && session_id.is_none() =>
                 {
+                    tracing::debug!(?tag);
                     let span = reader.read_text(tag.to_end().name())?;
+                    tracing::debug!(?span, "trying to parse session_id");
                     session_id = Some(span.parse()?);
+                    tracing::debug!(?session_id);
                 }
                 (_, Event::Comment(_)) => {
                     continue;

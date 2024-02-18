@@ -1,14 +1,14 @@
 use std::{
     fs::File,
-    io::BufReader,
+    io::{stderr, BufReader},
     path::{Path, PathBuf},
 };
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use clap::Parser;
 use clap_verbosity_flag::{Verbosity, WarnLevel};
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
-use simplelog::{ColorChoice, TermLogger, TerminalMode};
+use tracing_log::AsTrace;
 
 use netconf::{
     message::rpc::operation::{
@@ -21,13 +21,11 @@ use netconf::{
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
-    TermLogger::init(
-        args.verbosity.log_level_filter(),
-        Default::default(),
-        TerminalMode::Stderr,
-        ColorChoice::Auto,
-    )
-    .context("failed to init logger")?;
+    tracing_subscriber::fmt()
+        .with_max_level(args.verbosity.log_level_filter().as_trace())
+        .with_writer(stderr)
+        .try_init()
+        .map_err(|err| anyhow!(err))?;
     let addr = (args.host.as_str(), args.port);
     let ca_cert = read_cert(&args.ca_cert).context("failed to read CA certificate")?;
     let client_cert = read_cert(&args.client_cert).context("failed to read client certificate")?;
@@ -103,8 +101,8 @@ fn read_cert(path: &Path) -> anyhow::Result<CertificateDer<'static>> {
         .and_then(|ref mut reader| {
             match rustls_pemfile::read_one(reader).context("failed to read certificate file")? {
                 Some(rustls_pemfile::Item::X509Certificate(cert)) => Ok(cert),
-                Some(item) => anyhow::bail!("expected X.509 certificate, got {item:?}"),
-                None => anyhow::bail!("no certificate found in file '{}'", path.display()),
+                Some(item) => Err(anyhow!("expected X.509 certificate, got {item:?}")),
+                None => Err(anyhow!("no certificate found in file '{}'", path.display())),
             }
         })
 }
