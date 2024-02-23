@@ -4,9 +4,11 @@ use anyhow::Context;
 
 use netconf::{
     message::rpc::operation::{
-        edit_config::DefaultOperation,
-        junos::{CloseConfiguration, OpenConfiguration},
-        Builder, Commit, Datastore, EditConfig, Filter, GetConfig,
+        junos::{
+            load_configuration::{Config, Override, Xml},
+            CloseConfiguration, CommitConfiguration, LoadConfiguration, OpenConfiguration,
+        },
+        Builder, Datastore, Filter, GetConfig,
     },
     transport::Tls,
     Session,
@@ -117,17 +119,13 @@ impl Client<Open> {
         tracing::debug!("trying to load candidate configuration");
         tracing::trace!(?config);
         self.session
-            .rpc::<EditConfig<T>, _>(|builder| {
-                builder
-                    .target(Datastore::Candidate)?
-                    .config(config)
-                    .default_operation(DefaultOperation::Replace)
-                    .finish()
+            .rpc::<LoadConfiguration<_>, _>(|builder| {
+                builder.source(Config::new(config, Xml, Override)).finish()
             })
             .await
-            .context("failed to send NETCONF <edit-config> RPC request")?
+            .context("failed to send NETCONF <load-configuration> RPC request")?
             .await
-            .context("failed to replace candidate configuration")?;
+            .context("failed to load candidate configuration")?;
         Ok(self)
     }
 
@@ -136,9 +134,9 @@ impl Client<Open> {
     pub(crate) async fn commit_config(&mut self) -> anyhow::Result<()> {
         tracing::debug!("trying to commit candidate configuration");
         self.session
-            .rpc::<Commit, _>(|builder| builder.finish())
+            .rpc::<CommitConfiguration, _>(|builder| builder.finish())
             .await
-            .context("failed to send NETCONF '<commit>' RPC request")?
+            .context("failed to send NETCONF '<commit-configuration>' RPC request")?
             .await
             .context("failed to commit candidate configuration")
     }
