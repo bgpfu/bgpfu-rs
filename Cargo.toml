@@ -21,6 +21,7 @@ bgpfu-netconf = { path = "./netconf", version = "0.1.0-alpha.2" }
 anyhow = "^1.0"
 clap = {version = "^4.0", features = ["derive"]}
 clap-verbosity-flag = "^2.0"
+chrono = "^0.4"
 generic-ip = "^0.1"
 irrc = "^0.1"
 quick-xml = "^0.31"

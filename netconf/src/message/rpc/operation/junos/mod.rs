@@ -9,6 +9,14 @@ use crate::message::{
     xmlns, ReadError, ReadXml,
 };
 
+pub mod commit_configuration;
+#[doc(inline)]
+pub use self::commit_configuration::CommitConfiguration;
+
+pub mod load_configuration;
+#[doc(inline)]
+pub use self::load_configuration::LoadConfiguration;
+
 pub mod open_configuration;
 #[doc(inline)]
 pub use self::open_configuration::OpenConfiguration;
@@ -48,18 +56,6 @@ trivial_ops! {
 // <abort> message
 // https://www.juniper.net/documentation/us/en/software/junos/netconf/junos-xml-protocol/topics/ref/tag/junos-xml-protocol-abort.html
 //
-// /// Request that the NETCONF or Junos XML protocol server perform one of the variants of the commit
-// /// operation on the candidate configuration, a private copy of the candidate configuration, or an
-// /// open instance of the ephemeral configuration database.
-// ///
-// /// See [Juniper documentation][junos-docs].
-// ///
-// /// [junos-docs]: https://www.juniper.net/documentation/us/en/software/junos/netconf/junos-xml-protocol/topics/ref/tag/junos-xml-protocol-commit-configuration.html
-// pub operation CommitConfiguration {
-//     const NAME = "commit-configuration";
-//     type ReplyData = Never;
-// }
-//
 // /// Request checksum information for the specified file.
 // ///
 // /// See [Juniper documentation][junos-docs].
@@ -77,28 +73,6 @@ trivial_ops! {
 // /// [junos-docs]: https://www.juniper.net/documentation/us/en/software/junos/netconf/junos-xml-protocol/topics/ref/tag/junos-xml-protocol-get-configuration.html
 // pub operation GetConfiguration {
 //     const NAME = "get-configuration";
-//     type ReplyData = Never;
-// }
-//
-// /// Request that the NETCONF server load configuration data into the candidate configuration or
-// /// open configuration database.
-// ///
-// /// See [Juniper documentation][junos-docs].
-// ///
-// /// [junos-docs]: https://www.juniper.net/documentation/us/en/software/junos/netconf/junos-xml-protocol/topics/ref/tag/junos-xml-protocol-load-configuration.html
-// pub operation LoadConfiguration {
-//     const NAME = "load-configuration";
-//     type ReplyData = Never;
-// }
-//
-// /// Create a private copy of the candidate configuration or open the default instance or a
-// /// user-defined instance of the ephemeral configuration database.
-// ///
-// /// See [Juniper documentation][junos-docs].
-// ///
-// /// [junos-docs]: https://www.juniper.net/documentation/us/en/software/junos/netconf/junos-xml-protocol/topics/ref/tag/junos-xml-protocol-open-configuration.html
-// pub operation OpenConfiguration {
-//     const NAME = "open-configuration";
 //     type ReplyData = Never;
 // }
 //

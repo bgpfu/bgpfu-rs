@@ -3,6 +3,7 @@ use std::{
     io::Write,
     ops::Deref,
     sync::Arc,
+    time::Duration,
 };
 
 use iri_string::types::UriStr;
@@ -319,6 +320,12 @@ impl Url {
     }
 }
 
+impl AsRef<str> for Url {
+    fn as_ref(&self) -> &str {
+        self.inner.as_str()
+    }
+}
+
 impl Display for Url {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Display::fmt(&self.inner.as_ref(), f)
@@ -359,6 +366,25 @@ impl Token {
 impl Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Display::fmt(&self.inner, f)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Timeout(Duration);
+
+impl Timeout {
+    fn seconds(&self) -> BytesText<'static> {
+        BytesText::new(&self.0.as_secs().to_string()).into_owned()
+    }
+
+    fn minutes(&self) -> BytesText<'static> {
+        BytesText::new(&self.0.as_secs().div_ceil(60).to_string()).into_owned()
+    }
+}
+
+impl Default for Timeout {
+    fn default() -> Self {
+        Self(Duration::from_secs(600))
     }
 }
 

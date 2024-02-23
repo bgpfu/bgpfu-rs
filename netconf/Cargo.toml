@@ -14,9 +14,10 @@ categories.workspace = true
 name = "netconf"
 
 [features]
-junos = ["dep:paste"]
+junos = ["dep:chrono", "dep:paste"]
 
 [dependencies]
+chrono = {workspace = true, optional = true}
 quick-xml.workspace = true
 rustls-pki-types.workspace = true
 thiserror.workspace = true

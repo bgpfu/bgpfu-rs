@@ -9,7 +9,7 @@ use crate::{
     Error,
 };
 
-use super::{EmptyReply, Operation, Token, WriteXml};
+use super::{EmptyReply, Operation, Timeout, Token, WriteXml};
 
 #[derive(Debug, Clone)]
 pub struct Commit {
@@ -36,9 +36,7 @@ impl WriteXml for Commit {
                 if self.confirm_timeout != Timeout::default() {
                     _ = writer
                         .create_element("confirm-timeout")
-                        .write_text_content(BytesText::new(
-                            &self.confirm_timeout.0.as_secs().to_string(),
-                        ))?;
+                        .write_text_content(self.confirm_timeout.seconds())?;
                 };
                 if let Some(ref token) = self.persist {
                     _ = writer
@@ -60,15 +58,6 @@ impl WriteXml for Commit {
             _ = elem.write_empty()?;
             Ok(())
         }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Timeout(Duration);
-
-impl Default for Timeout {
-    fn default() -> Self {
-        Self(Duration::from_secs(600))
     }
 }
 
