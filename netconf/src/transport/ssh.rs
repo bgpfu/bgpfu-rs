@@ -1,4 +1,8 @@
-use std::fmt::Debug;
+use std::{
+    convert::Infallible,
+    fmt::{self, Debug},
+    str::FromStr,
+};
 
 use async_trait::async_trait;
 use bytes::{Bytes, BytesMut};
@@ -10,7 +14,7 @@ use russh::{
 use russh_keys::key::PublicKey;
 use tokio::{net::ToSocketAddrs, sync::mpsc, task::JoinHandle};
 
-use super::{Password, RecvHandle, SendHandle, Transport};
+use super::{RecvHandle, SendHandle, Transport};
 use crate::{message::MARKER, Error};
 
 #[derive(Debug)]
@@ -169,5 +173,28 @@ impl russh::client::Handler for Handler {
     async fn check_server_key(self, _: &PublicKey) -> Result<(Self, bool), Self::Error> {
         tracing::info!("NOT checking server public key");
         Ok((self, true))
+    }
+}
+
+#[derive(Clone)]
+pub struct Password(String);
+
+impl Password {
+    #[must_use]
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl Debug for Password {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Password").field(&"****").finish()
+    }
+}
+
+impl FromStr for Password {
+    type Err = Infallible;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.to_string()))
     }
 }

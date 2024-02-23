@@ -17,11 +17,12 @@ use crate::{
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     // Transport //
-    //
+    #[cfg(feature = "ssh")]
     /// The underlying SSH transport encountered an error.
     #[error(transparent)]
     SshTransport(#[from] russh::Error),
 
+    #[cfg(feature = "tls")]
     /// The underlying TLS transport encountered an error.
     #[error(transparent)]
     TlsTransport(#[from] tokio_rustls::rustls::Error),
@@ -38,6 +39,7 @@ pub enum Error {
     #[error("failed to dequeue a message: send side is closed")]
     DequeueMessage,
 
+    #[cfg(feature = "tls")]
     /// Invalid DNS name for certificate validation.
     #[error(transparent)]
     InvalidDnsName(#[from] rustls_pki_types::InvalidDnsNameError),

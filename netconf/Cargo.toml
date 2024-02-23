@@ -14,24 +14,34 @@ categories.workspace = true
 name = "netconf"
 
 [features]
+default = ["ssh", "tls"]
+ssh = ["dep:russh", "dep:russh-keys"]
+tls = [
+    "dep:tokio-rustls",
+    "dep:rustls-pki-types",
+    "tokio/sync",
+    "tokio/io-util",
+    "tokio/macros",
+    "tokio/net",
+]
 junos = ["dep:chrono", "dep:paste"]
 
 [dependencies]
-chrono = {workspace = true, optional = true}
+async-trait.workspace = true
+bytes.workspace = true
+iri-string.workspace = true
+memchr.workspace = true
 quick-xml.workspace = true
-rustls-pki-types.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-async-trait = "^0.1"
-bytes = "^1.0"
-iri-string = "^0.7"
-memchr = "^2.0"
-paste = { version = "^1.0", optional = true }
-russh = "^0.39"
-russh-keys = "^0.38"
-tokio-rustls = "^0.25"
-uuid = { version = "^1.0", features = ["v4", "fast-rng"] }
+uuid.workspace = true
+chrono = {workspace = true, optional = true}
+paste = { workspace = true, optional = true }
+russh = { workspace = true, optional = true }
+russh-keys = { workspace = true, optional = true }
+rustls-pki-types = { workspace = true, optional = true }
+tokio-rustls = { workspace = true, optional = true }
 
 
 [dev-dependencies]
@@ -42,7 +52,16 @@ rustls-pemfile.workspace = true
 tracing-log.workspace = true
 tracing-subscriber.workspace = true
 version-sync.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+
+[[example]]
+name = "ssh"
+required-features = ["ssh"]
+
+[[example]]
+name = "tls"
+required-features = ["tls"]
 
 [[example]]
 name = "ephemeral"
-required-features = ["junos"]
+required-features = ["tls", "junos"]

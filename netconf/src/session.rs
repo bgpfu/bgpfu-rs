@@ -8,7 +8,9 @@ use std::{
     sync::Arc,
 };
 
+#[cfg(feature = "tls")]
 use rustls_pki_types::{CertificateDer, PrivateKeyDer, ServerName};
+
 use tokio::{net::ToSocketAddrs, sync::Mutex};
 
 use crate::{
@@ -21,9 +23,15 @@ use crate::{
         },
         ClientHello, ClientMsg, ReadError, ServerHello, ServerMsg,
     },
-    transport::{Password, Ssh, Tls, Transport},
+    transport::Transport,
     Error,
 };
+
+#[cfg(feature = "tls")]
+use crate::transport::Tls;
+
+#[cfg(feature = "ssh")]
+use crate::transport::{Password, Ssh};
 
 /// An identifier used by a NETCONF server to uniquely identify a session.
 #[allow(clippy::module_name_repetitions)]
@@ -136,6 +144,7 @@ impl OutstandingRequest {
     }
 }
 
+#[cfg(feature = "ssh")]
 impl Session<Ssh> {
     /// Establish a new NETCONF session over an SSH transport.
     #[tracing::instrument(level = "debug")]
@@ -149,6 +158,7 @@ impl Session<Ssh> {
     }
 }
 
+#[cfg(feature = "tls")]
 impl Session<Tls> {
     /// Establish a new NETCONF session over a TLS transport.
     #[tracing::instrument(skip(ca_cert, client_cert, client_key), level = "debug")]

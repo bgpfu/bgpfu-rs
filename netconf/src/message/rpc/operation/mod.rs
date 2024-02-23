@@ -377,6 +377,7 @@ impl Timeout {
         BytesText::new(&self.0.as_secs().to_string()).into_owned()
     }
 
+    #[cfg(feature = "junos")]
     fn minutes(&self) -> BytesText<'static> {
         BytesText::new(&self.0.as_secs().div_ceil(60).to_string()).into_owned()
     }

@@ -33,15 +33,17 @@
 #![warn(unsafe_code)]
 #![warn(unsafe_op_in_unsafe_fn)]
 #![warn(unstable_features)]
-#![warn(unused_crate_dependencies)]
 #![warn(unused_extern_crates)]
 #![warn(unused_import_braces)]
 #![warn(unused_lifetimes)]
 #![warn(unused_qualifications)]
 #![warn(unused_results)]
 #![warn(variant_size_differences)]
+#![cfg_attr(any(feature = "ssh", feature = "tls"), warn(unused_crate_dependencies))]
 // docs.rs build config
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
+// omit everything if we don't have a transport feature enabled
+#![cfg(any(feature = "ssh", feature = "tls"))]
 
 mod error;
 pub use self::error::Error;
