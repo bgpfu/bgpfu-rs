@@ -1,3 +1,5 @@
+use std::fs::File;
+use std::io::StderrLock;
 use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -7,10 +9,12 @@ use anyhow::{anyhow, Context};
 
 use clap::{Args, Parser};
 
-use clap_verbosity_flag::{Verbosity, WarnLevel};
+use clap_verbosity_flag::{InfoLevel, Verbosity};
 
 use rustls_pki_types::ServerName;
 use tracing_log::AsTrace;
+use tracing_subscriber::fmt::writer::EitherWriter;
+use tracing_subscriber::fmt::MakeWriter;
 
 use crate::task::Updater;
 
@@ -100,15 +104,15 @@ pub(super) struct NetconfOpts {
     port: u16,
 
     /// NETCONF TLS transport CA certificate path.
-    #[arg(long)]
+    #[arg(long, default_value_os_t = Self::default_pki_path("ca.crt"))]
     ca_cert_path: PathBuf,
 
     /// NETCONF TLS transport client certificate path.
-    #[arg(long)]
+    #[arg(long, default_value_os_t = Self::default_pki_path("client.crt"))]
     client_cert_path: PathBuf,
 
     /// NETCONF TLS transport client private key path.
-    #[arg(long)]
+    #[arg(long, default_value_os_t = Self::default_pki_path("client.key"))]
     client_key_path: PathBuf,
 
     /// Override the domain name against which the NETCONF server's TLS certificate is verified.
@@ -145,55 +149,66 @@ impl NetconfOpts {
     pub(super) fn tls_server_name(&self) -> Option<ServerName<'static>> {
         self.tls_server_name.clone()
     }
-}
 
-const DEFAULT_LOGGING_DEST: &str = if cfg!(target_platform = "junos-freebsd") {
-    "/var/log/bgpfu-junos-agent.log"
-} else {
-    "STDERR"
-};
+    fn default_pki_path<P: AsRef<Path>>(file_name: P) -> PathBuf {
+        let pki_dir = if cfg!(target_platform = "junos-freebsd") {
+            Path::new("/var/etc/bgpfu")
+        } else {
+            Path::new("./certs")
+        };
+        pki_dir.join(file_name)
+    }
+}
 
 #[derive(Debug, Args)]
 struct LoggingOpts {
     /// Logging output destination
-    #[arg(short = 'l', long, default_value = DEFAULT_LOGGING_DEST)]
-    logging_dest: LoggingDest,
+    #[arg(short = 'l', long, default_value_t)]
+    logging_dest: LoggingDest<PathBuf>,
 
     #[command(flatten)]
-    verbosity: Verbosity<WarnLevel>,
+    verbosity: Verbosity<InfoLevel>,
 }
 
 impl LoggingOpts {
     fn init(self) -> anyhow::Result<()> {
         let level = self.verbosity.log_level_filter().as_trace();
-        // TODO:
-        // let (writer, _guard) = match self.logging_dest {
-        //     LoggingDest::File(ref path) => {
-        //         let canonical = path.canonicalize()?;
-        //         let writer = tracing_appender::rolling::daily(
-        //             canonical.parent().unwrap(),
-        //             canonical.file_name().unwrap(),
-        //         );
-        //         tracing_appender::non_blocking(writer)
-        //     }
-        //     LoggingDest::StdErr => tracing_appender::non_blocking(std::io::stderr()),
-        // };
         tracing_subscriber::fmt()
+            .compact()
             .with_max_level(level)
-            // .with_writer(writer)
-            .with_writer(std::io::stderr)
+            .with_ansi(self.logging_dest.emit_colours())
+            .with_writer(self.logging_dest.open()?)
             .try_init()
             .map_err(|err| anyhow!(err))
     }
 }
 
 #[derive(Debug, Clone)]
-enum LoggingDest {
+enum LoggingDest<T> {
     StdErr,
-    File(PathBuf),
+    File(T),
 }
 
-impl fmt::Display for LoggingDest {
+impl<T> LoggingDest<T> {
+    const fn emit_colours(&self) -> bool {
+        match self {
+            Self::StdErr => true,
+            Self::File(_) => false,
+        }
+    }
+}
+
+impl Default for LoggingDest<PathBuf> {
+    fn default() -> Self {
+        if cfg!(target_platform = "junos-freebsd") {
+            Self::File("/var/log/bgpfu-junos-agent.log".into())
+        } else {
+            Self::StdErr
+        }
+    }
+}
+
+impl fmt::Display for LoggingDest<PathBuf> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::StdErr => write!(f, "STDERR"),
@@ -202,7 +217,7 @@ impl fmt::Display for LoggingDest {
     }
 }
 
-impl FromStr for LoggingDest {
+impl FromStr for LoggingDest<PathBuf> {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -210,6 +225,31 @@ impl FromStr for LoggingDest {
             Ok(Self::StdErr)
         } else {
             Ok(Self::File(s.into()))
+        }
+    }
+}
+
+impl LoggingDest<PathBuf> {
+    fn open(self) -> anyhow::Result<LoggingDest<File>> {
+        match self {
+            Self::StdErr => Ok(LoggingDest::StdErr),
+            Self::File(ref path) => File::options()
+                .create(true)
+                .append(true)
+                .open(path)
+                .context("failed to open log file '{path.display()}'")
+                .map(LoggingDest::File),
+        }
+    }
+}
+
+impl<'a> MakeWriter<'a> for LoggingDest<File> {
+    type Writer = EitherWriter<StderrLock<'a>, &'a File>;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        match self {
+            Self::StdErr => Self::Writer::A(std::io::stderr().lock()),
+            Self::File(file) => Self::Writer::B(file),
         }
     }
 }
