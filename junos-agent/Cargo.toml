@@ -24,9 +24,8 @@ rpsl.workspace = true
 rustls-pemfile.workspace = true
 rustls-pki-types.workspace = true
 tracing.workspace = true
-tracing-appender.workspace = true
 tracing-log.workspace = true
-tracing-subscriber.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 bgpfu-netconf = { workspace = true, features = ["tls", "junos"] }
 tokio = { workspace = true, features = ["fs", "signal", "time", "rt-multi-thread", "macros"] }
 

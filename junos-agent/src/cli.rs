@@ -15,6 +15,7 @@ use rustls_pki_types::ServerName;
 use tracing_log::AsTrace;
 use tracing_subscriber::fmt::writer::EitherWriter;
 use tracing_subscriber::fmt::MakeWriter;
+use tracing_subscriber::EnvFilter;
 
 use crate::task::Updater;
 
@@ -173,9 +174,12 @@ struct LoggingOpts {
 impl LoggingOpts {
     fn init(self) -> anyhow::Result<()> {
         let level = self.verbosity.log_level_filter().as_trace();
+        let filter = EnvFilter::builder()
+            .with_default_directive(level.into())
+            .from_env_lossy();
         tracing_subscriber::fmt()
             .compact()
-            .with_max_level(level)
+            .with_env_filter(filter)
             .with_ansi(self.logging_dest.emit_colours())
             .with_writer(self.logging_dest.open()?)
             .try_init()
