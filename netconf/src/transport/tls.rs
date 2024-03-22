@@ -98,7 +98,7 @@ pub struct Receiver {
 
 impl Receiver {
     fn new(read: ReadHalf<TlsStream<TcpStream>>) -> Self {
-        let buf = BytesMut::with_capacity(2 << 20);
+        let buf = BytesMut::with_capacity(1 << 10);
         let finder = Finder::new(MARKER);
         Self { read, buf, finder }
     }
