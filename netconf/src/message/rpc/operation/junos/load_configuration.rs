@@ -365,6 +365,34 @@ where
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reply {
     Ok,
+    // TODO: this actually contains <rpc-error> elements:
+    //
+    //  <rpc-reply
+    //      xmlns=\"urn:ietf:params:xml:ns:netconf:base:1.0\"
+    //      xmlns:junos=\"http://xml.juniper.net/junos/23.1R0/junos\"
+    //      message-id=\"6\">
+    //      <load-configuration-results>
+    //          <rpc-error>
+    //              <error-type>protocol</error-type>
+    //              <error-tag>operation-failed</error-tag>
+    //              <error-severity>error</error-severity>
+    //              <error-message>
+    //                  configuration database size limit exceeded
+    //              </error-message>
+    //          </rpc-error>
+    //          <rpc-error>
+    //              <error-type>protocol</error-type>
+    //              <error-tag>operation-failed</error-tag>
+    //              <error-severity>error</error-severity>
+    //              <error-message>statement creation failed</error-message>
+    //              <error-info>
+    //                  <bad-element>route-filter</bad-element>
+    //              </error-info>
+    //          </rpc-error>
+    //          <load-error-count>1</load-error-count>
+    //      </load-configuration-results>
+    //  </rpc-reply>
+    //  ]]>]]>
     ErrorCount(usize),
 }
 
