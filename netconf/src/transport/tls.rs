@@ -106,22 +106,22 @@ impl Receiver {
 
 #[async_trait]
 impl RecvHandle for Receiver {
-    #[tracing::instrument(level = "trace")]
+    #[tracing::instrument(skip(self), level = "debug")]
     async fn recv(&mut self) -> Result<Bytes, Error> {
+        let mut searched = 0;
         loop {
-            tracing::trace!("trying to read from transport");
-            let len = self.read.read_buf(&mut self.buf).await?;
-            tracing::trace!("read {len} bytes. buffer length is {}", self.buf.len());
-            // TODO:
-            // de-duplicate message-break searching with ssh transport
-            tracing::trace!("searching for message-break marker");
-            if let Some(index) = self.finder.find(&self.buf) {
-                let end = index + MARKER.len();
+            tracing::trace!(?self.buf, "searching for message-break marker");
+            if let Some(index) = self.finder.find(&self.buf[searched..]) {
+                let end = searched + index + MARKER.len();
                 tracing::trace!("splitting {end} bytes from read buffer");
                 let message = self.buf.split_to(end).freeze();
                 tracing::trace!(?message);
                 break Ok(message);
             }
+            searched = self.buf.len();
+            tracing::trace!("trying to read from transport");
+            let len = self.read.read_buf(&mut self.buf).await?;
+            tracing::debug!("read {len} bytes. buffer length is {}", self.buf.len());
         }
     }
 }
