@@ -83,7 +83,9 @@ impl Sender {
 impl SendHandle for Sender {
     #[tracing::instrument(level = "debug")]
     async fn send(&mut self, data: Bytes) -> Result<(), Error> {
-        Ok(self.write.write_all(&data).await?)
+        self.write.write_all(&data).await?;
+        self.write.flush().await?;
+        Ok(())
     }
 }
 
