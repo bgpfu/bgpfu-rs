@@ -122,8 +122,6 @@ impl ClientMsg for ClientHello {}
 mod tests {
     use iri_string::types::UriStr;
 
-    use crate::capabilities::Base;
-
     use super::*;
 
     #[test]

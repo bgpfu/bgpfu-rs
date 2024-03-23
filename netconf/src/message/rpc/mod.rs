@@ -295,7 +295,7 @@ impl<D> IntoResult for DataReply<D> {
 mod tests {
     use quick_xml::events::BytesText;
 
-    use super::{operation, *};
+    use super::*;
     use crate::capabilities::Requirements;
 
     #[derive(Debug, Clone, PartialEq, Eq)]
