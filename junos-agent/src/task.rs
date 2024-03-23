@@ -148,6 +148,8 @@ impl Loop {
             signal(SignalKind::interrupt()).context("failed to register handler for SIGINT")?;
         let mut sigterm =
             signal(SignalKind::terminate()).context("failed to register handler for SIGTERM")?;
+        let mut sighup =
+            signal(SignalKind::hangup()).context("failed to register handler for SIGHUP")?;
         loop {
             tokio::select! {
                 _ = sigint.recv() => {
@@ -157,6 +159,10 @@ impl Loop {
                 _ = sigterm.recv() => {
                     tracing::info!("got SIGTERM, exiting");
                     break Ok(())
+                }
+                _ = sighup.recv() => {
+                    tracing::info!("got SIGHUP, resetting interval timer");
+                    interval.reset_immediately();
                 }
                 _ = interval.tick() => {
                     tracing::info!("starting updater job");
