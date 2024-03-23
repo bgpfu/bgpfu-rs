@@ -141,6 +141,7 @@ impl Loop {
     pub(crate) async fn start(self) -> anyhow::Result<()> {
         tracing::info!("starting updater loop with frequency {:?}", self.period);
         let mut interval = time::interval(self.period);
+        let mut backoff = Duration::from_secs(60);
         let mut sigint =
             signal(SignalKind::interrupt()).context("failed to register handler for SIGINT")?;
         let mut sigterm =
@@ -158,18 +159,26 @@ impl Loop {
                 _ = interval.tick() => {
                     tracing::info!("starting updater job");
                     let job = self.updater.clone().run();
-                    tokio::spawn(job)
-                        .await
-                        .unwrap_or_else(|err| {
-                            tracing::error!("updater thread panicked: {err}");
-                            Ok(())
-                        })
-                        .unwrap_or_else(|err| {
+                    match handle_task(tokio::spawn(job)).await {
+                        Ok(()) => {
+                            interval.reset();
+                        }
+                        Err(err) => {
                             tracing::error!("updater job failed: {err:#}");
-                        });
-                    interval.reset();
+                            interval.reset_after(backoff);
+                            backoff *= 2;
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+async fn handle_task<T: Send>(handle: JoinHandle<anyhow::Result<T>>) -> anyhow::Result<T> {
+    match handle.await {
+        Ok(Ok(result)) => Ok(result),
+        Ok(Err(err)) => Err(err).context("task failed"),
+        Err(err) => Err(err).context("task panicked"),
     }
 }
