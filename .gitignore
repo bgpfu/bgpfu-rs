@@ -3,3 +3,4 @@ result*
 pki/
 flamegraph.svg
 perf.data
+rustc-ice-*
