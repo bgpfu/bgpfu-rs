@@ -29,6 +29,10 @@ impl Errors {
         self.inner.is_empty()
     }
 
+    pub(super) fn len(&self) -> usize {
+        self.inner.len()
+    }
+
     pub(super) fn push(&mut self, err: Error) {
         self.inner.push(err);
     }

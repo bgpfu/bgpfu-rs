@@ -152,11 +152,6 @@ pub enum Error {
     /// Empty `rpc-reply` when data was expected.
     #[error("unexpectedly empty rpc-reply")]
     EmptyRpcReply,
-
-    #[cfg(feature = "junos")]
-    /// Errors occurred during a `load-configuration` operation.
-    #[error("load-configuration operation failed with {0} errors")]
-    LoadConfiguration(usize),
 }
 
 impl Error {

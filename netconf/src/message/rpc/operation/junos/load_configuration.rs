@@ -10,8 +10,9 @@ use crate::{
     capabilities::{Capability, Requirements},
     message::{
         rpc::{
+            self,
             operation::{self, params::Required},
-            IntoResult, Operation,
+            Errors, IntoResult, Operation,
         },
         xmlns, ReadError, ReadXml, WriteError, WriteXml,
     },
@@ -362,7 +363,7 @@ where
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Reply {
     Ok,
     // TODO: this actually contains <rpc-error> elements:
@@ -393,13 +394,15 @@ pub enum Reply {
     //      </load-configuration-results>
     //  </rpc-reply>
     //  ]]>]]>
-    ErrorCount(usize),
+    Errs(Errors),
 }
 
 impl ReadXml for Reply {
     #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "debug")]
     fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
+        let mut error_count = None;
+        let mut errors = Errors::new();
         let mut this = None;
         tracing::debug!("expecting <load-configuration-results>");
         loop {
@@ -417,16 +420,25 @@ impl ReadXml for Reply {
                                 tracing::debug!(?tag);
                                 this = Some(Self::Ok);
                             }
+                            (ResolveResult::Bound(ns), Event::Start(tag))
+                                if ns == xmlns::BASE
+                                    && tag.local_name().as_ref() == b"rpc-error"
+                                    && this.is_none() =>
+                            {
+                                tracing::debug!(?tag);
+                                errors.push(rpc::Error::read_xml(reader, &tag)?);
+                            }
                             (ResolveResult::Bound(xmlns::BASE), Event::Start(tag))
                                 if tag.local_name().as_ref() == b"load-error-count"
                                     && this.is_none() =>
                             {
                                 tracing::debug!(?tag);
-                                let count = reader
-                                    .read_text(tag.to_end().name())?
-                                    .parse::<usize>()
-                                    .map_err(|err| ReadError::Other(err.into()))?;
-                                this = Some(Self::ErrorCount(count));
+                                error_count = Some(
+                                    reader
+                                        .read_text(tag.to_end().name())?
+                                        .parse::<usize>()
+                                        .map_err(|err| ReadError::Other(err.into()))?,
+                                );
                             }
                             (_, Event::Comment(_)) => continue,
                             (_, Event::End(tag)) if tag == end => break,
@@ -445,7 +457,11 @@ impl ReadXml for Reply {
                 }
             }
         }
-        this.ok_or_else(|| ReadError::missing_element("rpc-reply", "load-configuration-results"))
+        this.or_else(|| match (errors.len(), error_count) {
+            (errs, Some(count)) if errs == count => Some(Self::Errs(errors)),
+            _ => None,
+        })
+        .ok_or_else(|| ReadError::missing_element("rpc-reply", "load-configuration-results"))
     }
 }
 
@@ -454,7 +470,7 @@ impl IntoResult for Reply {
     fn into_result(self) -> Result<<Self as IntoResult>::Ok, crate::Error> {
         match self {
             Self::Ok => Ok(()),
-            Self::ErrorCount(error_count) => Err(crate::Error::LoadConfiguration(error_count)),
+            Self::Errs(errors) => Err(errors.into()),
         }
     }
 }
