@@ -136,12 +136,14 @@ pub(crate) struct Loop {
     period: Duration,
 }
 
+const MIN_BACKOFF: Duration = Duration::from_secs(60);
+
 impl Loop {
     #[tracing::instrument(skip(self), level = "trace")]
     pub(crate) async fn start(self) -> anyhow::Result<()> {
         tracing::info!("starting updater loop with frequency {:?}", self.period);
         let mut interval = time::interval(self.period);
-        let mut backoff = Duration::from_secs(60);
+        let mut backoff = MIN_BACKOFF;
         let mut sigint =
             signal(SignalKind::interrupt()).context("failed to register handler for SIGINT")?;
         let mut sigterm =
@@ -162,6 +164,7 @@ impl Loop {
                     match handle_task(tokio::spawn(job)).await {
                         Ok(()) => {
                             interval.reset();
+                            backoff = MIN_BACKOFF;
                         }
                         Err(err) => {
                             tracing::error!("updater job failed: {err:#}");
