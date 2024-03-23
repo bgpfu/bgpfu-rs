@@ -6,13 +6,14 @@ use bgpfu::RpslEvaluator;
 
 use tokio::{
     signal::unix::{signal, SignalKind},
+    task::JoinHandle,
     time::{self, Duration},
 };
 
 use crate::{
     cli::{IrrdOpts, JunosOpts, NetconfOpts},
-    config::CandidatePolicyStmts,
     netconf::Client,
+    policies::{Candidate, Evaluate, Installed, Policies},
 };
 
 #[derive(Debug, Clone)]
@@ -58,23 +59,59 @@ impl Updater {
         .await
         .context("failed to open ephemeral database")?;
 
-        let candidates = netconf_client
-            .get_config::<CandidatePolicyStmts>()
+        let evaluate_candidates = netconf_client
+            .fetch_config::<Policies<Candidate>>()
             .await
-            .context("failed to get candidate policies")?;
+            .context("failed to request candidate configuration")
+            .map(|response| {
+                tokio::spawn(async move {
+                    let policies = response
+                        .await
+                        .context("failed to fetch candidate policy statements")?;
+                    tracing::info!(
+                        "successfully fetched {} candidate policy statements",
+                        policies.len()
+                    );
+                    let evaluated = tokio::task::block_in_place(|| {
+                        RpslEvaluator::new(self.irrd.host(), self.irrd.port())
+                            .context("failed to connect to IRRd server")
+                            .map(|mut evaluator| policies.evaluate(&mut evaluator))
+                    })?;
+                    tracing::info!(
+                        "successfully evaluated {} of {} policy statements",
+                        evaluated.succeeded(),
+                        evaluated.len()
+                    );
+                    Ok(evaluated)
+                })
+            })?;
 
-        tracing::info!("found {} candidate policy statements", candidates.len());
+        let fetch_installed = netconf_client
+            .fetch_config::<Policies<Installed>>()
+            .await
+            .context("failed to request installed ephemeral configuration")
+            .map(|response| {
+                tokio::spawn(async move {
+                    let policies = response
+                        .await
+                        .context("failed to fetch installed policy statements")?;
+                    tracing::info!(
+                        "successfully fetched {} installed policy statements",
+                        policies.len()
+                    );
+                    Ok(policies)
+                })
+            })?;
 
-        let config = tokio::task::block_in_place(|| {
-            RpslEvaluator::new(self.irrd.host(), self.irrd.port())
-                .context("failed to connect to IRRd server")
-                .map(|mut evaluator| candidates.evaluate(&mut evaluator))
-        })?;
+        let (evaluated, installed) = tokio::try_join!(
+            handle_task(evaluate_candidates),
+            handle_task(fetch_installed)
+        )?;
 
-        tracing::info!("successfully evaluated {} policy statements", config.len());
+        let updates = evaluated.compare(&installed);
 
         netconf_client
-            .load_config(config)
+            .load_config(updates)
             .await
             .context("failed to load configuration")?
             .commit_config()

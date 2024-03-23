@@ -16,8 +16,10 @@ name = "bgpfu-junos-agent"
 [dependencies]
 anyhow.workspace = true
 bgpfu-lib.workspace = true
+chrono.workspace = true
 clap.workspace = true
 clap-verbosity-flag.workspace = true
+futures.workspace = true
 generic-ip.workspace = true
 quick-xml.workspace = true
 rpsl.workspace = true

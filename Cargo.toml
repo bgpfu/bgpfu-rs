@@ -24,7 +24,8 @@ bytes = "^1.0"
 clap = {version = "^4.0", features = ["derive"]}
 clap-verbosity-flag = "^2.0"
 chrono = "^0.4"
-generic-ip = "^0.1"
+futures = { version = "^0.3.30", default-features = false }
+generic-ip = "^0.1.1"
 iri-string = "^0.7"
 irrc = "^0.1"
 memchr = "^2.0"

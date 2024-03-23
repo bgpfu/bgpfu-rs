@@ -46,8 +46,8 @@
 mod cli;
 pub use self::cli::main;
 
-mod config;
 mod netconf;
+mod policies;
 mod task;
 
 // silence unused dev-dependency warnings

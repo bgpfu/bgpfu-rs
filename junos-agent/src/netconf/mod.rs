@@ -1,22 +1,21 @@
-use std::{fmt::Debug, marker::PhantomData, path::Path};
+use std::{fmt::Debug, future::Future, marker::PhantomData, path::Path};
 
-use anyhow::Context;
-
+use anyhow::{anyhow, Context};
+use futures::TryFutureExt;
 use netconf::{
     message::rpc::operation::{
         junos::{
-            load_configuration::{Config, Override, Xml},
+            load_configuration::{Config, Merge, Xml},
             CloseConfiguration, CommitConfiguration, LoadConfiguration, OpenConfiguration,
         },
-        Builder, Datastore, Filter, GetConfig,
+        Builder, Filter, GetConfig,
     },
     transport::Tls,
     Session,
 };
-
 use rustls_pki_types::ServerName;
 
-use crate::config::{read::ReadConfig, write::WriteConfig};
+use crate::policies::{Fetch, Load};
 
 mod pem;
 use self::pem::{read_cert, read_private_key};
@@ -93,39 +92,51 @@ impl Client<Closed> {
 
 impl Client<Open> {
     #[tracing::instrument(skip(self), level = "debug")]
-    pub(crate) async fn get_config<T>(&mut self) -> anyhow::Result<T>
+    pub(crate) async fn fetch_config<T>(
+        &mut self,
+    ) -> anyhow::Result<impl Future<Output = anyhow::Result<T>>>
     where
-        T: ReadConfig,
+        T: Fetch,
     {
-        tracing::debug!("trying to read running configuration");
-        self.session
+        tracing::debug!("trying to fetch configuration");
+        let future = self
+            .session
             .rpc::<GetConfig<T>, _>(|builder| {
                 builder
-                    .source(Datastore::Running)?
-                    .filter(Some(Filter::Subtree(T::FILTER.to_string())))?
+                    .source(T::DATASTORE)?
+                    .filter(T::FILTER.map(|filter| Filter::Subtree(filter.to_string())))?
                     .finish()
             })
             .await
             .context("failed to send NETCONF '<get-config>' RPC request")?
-            .await
-            .context("failed to retreive running configuration")
+            .map_err(|err| anyhow!(err).context("failed to fetch configuration"));
+        Ok(future)
     }
 
     #[tracing::instrument(skip(self, config), level = "debug")]
     pub(crate) async fn load_config<T>(&mut self, config: T) -> anyhow::Result<&mut Self>
     where
-        T: WriteConfig,
+        T: Load,
     {
         tracing::debug!("trying to load candidate configuration");
         tracing::trace!(?config);
-        self.session
-            .rpc::<LoadConfiguration<_>, _>(|builder| {
-                builder.source(Config::new(config, Xml, Override)).finish()
-            })
-            .await
-            .context("failed to send NETCONF <load-configuration> RPC request")?
-            .await
-            .context("failed to load candidate configuration")?;
+        let updates = {
+            let mut updates = Vec::new();
+            for update in config.updates() {
+                updates.push(
+                    self.session
+                        .rpc::<LoadConfiguration<_>, _>(|builder| {
+                            builder.source(Config::new(update, Xml, Merge)).finish()
+                        })
+                        .await
+                        .context("failed to send NETCONF <load-configuration> RPC request")?,
+                );
+            }
+            updates
+        };
+        for update in updates {
+            update.await.context("failed to load configuration batch")?;
+        }
         Ok(self)
     }
 
