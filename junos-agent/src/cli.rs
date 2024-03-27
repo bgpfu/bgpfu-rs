@@ -154,7 +154,10 @@ impl NetconfOpts {
 
     fn default_pki_path<P: AsRef<Path>>(file_name: P) -> PathBuf {
         let pki_dir = if cfg!(target_platform = "junos-freebsd") {
-            Path::new("/var/etc/bgpfu")
+            // TODO:
+            // Is this the right place to keep these?
+            // Is there a way of using the Junos PKI infrastructure?
+            Path::new("/var/db/bgpfu")
         } else {
             Path::new("./certs")
         };
