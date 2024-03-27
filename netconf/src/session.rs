@@ -261,37 +261,56 @@ impl<T: Transport> Session<T> {
         };
         let requests = self.requests.clone();
         let rx = self.transport_rx.clone();
-        let fut = async move {
-            loop {
-                if let Some(partial) = requests
-                    .lock()
-                    .await
-                    .get_mut(&message_id)
-                    .ok_or_else(|| Error::RequestNotFound(message_id))?
-                    .take()?
-                {
-                    let reply: rpc::Reply<O> = partial.try_into()?;
-                    break reply.into_result();
-                };
-                let reply = rpc::PartialReply::recv(&mut *rx.lock().await).await?;
-                #[allow(clippy::significant_drop_in_scrutinee)]
-                match requests
-                    .lock()
-                    .await
-                    .get_mut(&reply.message_id())
-                    .ok_or_else(|| Error::RequestNotFound(reply.message_id()))?
-                {
-                    OutstandingRequest::Complete => break Err(Error::RequestComplete),
-                    OutstandingRequest::Ready(_) => {
-                        break Err(Error::MessageIdCollision(reply.message_id()))
-                    }
-                    pending @ OutstandingRequest::Pending => {
-                        _ = mem::replace(pending, OutstandingRequest::Ready(reply));
-                    }
+        Ok(Self::recv::<O>(message_id, requests, rx))
+    }
+
+    #[tracing::instrument(skip(requests, rx), level = "debug")]
+    async fn recv<O>(
+        message_id: rpc::MessageId,
+        requests: Arc<Mutex<HashMap<rpc::MessageId, OutstandingRequest>>>,
+        rx: Arc<Mutex<<T as Transport>::RecvHandle>>,
+    ) -> Result<<O::Reply as IntoResult>::Ok, Error>
+    where
+        O: rpc::Operation,
+    {
+        // TODO:
+        // Try using a background task to read from the transport, and then just check that task
+        // and `take()` from requests in a `select!` here.
+        loop {
+            let mut rx_guard = rx.lock().await;
+            tracing::trace!(?requests);
+            tracing::debug!("checking for ready response");
+            if let Some(partial) = requests
+                .lock()
+                .await
+                .get_mut(&message_id)
+                .ok_or_else(|| Error::RequestNotFound(message_id))?
+                .take()?
+            {
+                tracing::debug!("found ready response");
+                let reply: rpc::Reply<O> = partial.try_into()?;
+                break reply.into_result();
+            };
+            tracing::debug!("response to {message_id:?} not yet ready");
+            let reply = rpc::PartialReply::recv(&mut *rx_guard).await?;
+            #[allow(clippy::significant_drop_in_scrutinee)]
+            match requests
+                .lock()
+                .await
+                .get_mut(&reply.message_id())
+                .ok_or_else(|| Error::RequestNotFound(reply.message_id()))?
+            {
+                OutstandingRequest::Complete => break Err(Error::RequestComplete),
+                OutstandingRequest::Ready(_) => {
+                    break Err(Error::MessageIdCollision(reply.message_id()))
                 }
-            }
-        };
-        Ok(fut)
+                pending @ OutstandingRequest::Pending => {
+                    tracing::debug!("storing response to {:?}", reply.message_id());
+                    _ = mem::replace(pending, OutstandingRequest::Ready(reply));
+                }
+            };
+            drop(rx_guard);
+        }
     }
 
     /// Close the NETCONF session gracefully using the `<close-session>` RPC operation.
