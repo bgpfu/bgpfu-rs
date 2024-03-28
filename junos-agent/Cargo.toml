@@ -24,11 +24,14 @@ generic-ip.workspace = true
 gethostname.workspace = true
 once_cell.workspace = true
 quick-xml.workspace = true
+rolling-file.workspace = true
 rpsl.workspace = true
 rustls-pemfile.workspace = true
 rustls-pki-types.workspace = true
 tracing.workspace = true
+tracing-appender.workspace = true
 tracing-log.workspace = true
+ubyte.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 bgpfu-netconf = { workspace = true, features = ["tls", "junos"] }
 tokio = { workspace = true, features = ["fs", "signal", "time", "rt-multi-thread", "macros"] }

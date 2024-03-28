@@ -1,5 +1,4 @@
-use std::fs::File;
-use std::io::StderrLock;
+use std::fmt::Display;
 use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -11,11 +10,12 @@ use clap::{Args, Parser};
 
 use clap_verbosity_flag::{InfoLevel, Verbosity};
 
+use rolling_file::{BasicRollingFileAppender, RollingConditionBasic};
 use rustls_pki_types::ServerName;
+use tracing_appender::non_blocking::{NonBlocking, NonBlockingBuilder, WorkerGuard};
 use tracing_log::AsTrace;
-use tracing_subscriber::fmt::writer::EitherWriter;
-use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::EnvFilter;
+use ubyte::ByteUnit;
 
 use crate::task::Updater;
 
@@ -24,7 +24,7 @@ use crate::task::Updater;
 pub async fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
 
-    args.logging.init()?;
+    let _guard = args.logging.init()?;
 
     let updater = Updater::new(args.netconf, args.irrd, args.junos);
 
@@ -70,7 +70,7 @@ impl From<u64> for Frequency {
     }
 }
 
-impl fmt::Display for Frequency {
+impl Display for Frequency {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::OneShot => 0.fmt(f),
@@ -184,23 +184,30 @@ struct LoggingOpts {
     #[arg(short = 'l', long, default_value_t)]
     logging_dest: LoggingDest<PathBuf>,
 
+    /// Size at which log file is rotated
+    #[arg(long, default_value_t = FileSize(ByteUnit::Megabyte(10)))]
+    log_file_size: FileSize,
+
     #[command(flatten)]
     verbosity: Verbosity<InfoLevel>,
 }
 
 impl LoggingOpts {
-    fn init(self) -> anyhow::Result<()> {
+    fn init(self) -> anyhow::Result<WorkerGuard> {
         let level = self.verbosity.log_level_filter().as_trace();
         let filter = EnvFilter::builder()
             .with_default_directive(level.into())
             .from_env_lossy();
-        tracing_subscriber::fmt()
+        let builder = tracing_subscriber::fmt()
             .compact()
             .with_env_filter(filter)
-            .with_ansi(self.logging_dest.emit_colours())
-            .with_writer(self.logging_dest.open()?)
+            .with_ansi(self.logging_dest.emit_colours());
+        let (non_blocking, guard) = self.logging_dest.open(self.log_file_size)?;
+        builder
+            .with_writer(non_blocking)
             .try_init()
-            .map_err(|err| anyhow!(err))
+            .map_err(|err| anyhow!(err))?;
+        Ok(guard)
     }
 }
 
@@ -229,7 +236,7 @@ impl Default for LoggingDest<PathBuf> {
     }
 }
 
-impl fmt::Display for LoggingDest<PathBuf> {
+impl Display for LoggingDest<PathBuf> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::StdErr => write!(f, "STDERR"),
@@ -251,27 +258,43 @@ impl FromStr for LoggingDest<PathBuf> {
 }
 
 impl LoggingDest<PathBuf> {
-    fn open(self) -> anyhow::Result<LoggingDest<File>> {
+    fn open(self, max_size: FileSize) -> anyhow::Result<(NonBlocking, WorkerGuard)> {
+        let builder = NonBlockingBuilder::default().lossy(false);
         match self {
-            Self::StdErr => Ok(LoggingDest::StdErr),
-            Self::File(ref path) => File::options()
-                .create(true)
-                .append(true)
-                .open(path)
-                .context("failed to open log file '{path.display()}'")
-                .map(LoggingDest::File),
+            Self::StdErr => Ok(builder.finish(std::io::stderr())),
+            Self::File(path) => {
+                let writer = BasicRollingFileAppender::new(
+                    path,
+                    RollingConditionBasic::new().max_size(max_size.to_u64()),
+                    9,
+                )
+                .context("failed to open log file '{path.display()}'")?;
+                Ok(builder.finish(writer))
+            }
         }
     }
 }
 
-impl<'a> MakeWriter<'a> for LoggingDest<File> {
-    type Writer = EitherWriter<StderrLock<'a>, &'a File>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct FileSize(ByteUnit);
 
-    fn make_writer(&'a self) -> Self::Writer {
-        match self {
-            Self::StdErr => Self::Writer::A(std::io::stderr().lock()),
-            Self::File(file) => Self::Writer::B(file),
-        }
+impl FileSize {
+    fn to_u64(self) -> u64 {
+        self.0.into()
+    }
+}
+
+impl Display for FileSize {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl FromStr for FileSize {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse::<ByteUnit>().map_err(|err| anyhow!(err)).map(Self)
     }
 }
 
