@@ -239,7 +239,9 @@ impl ReadXml for Maybe<Installed> {
                 (ResolveResult::Bound(XNM), Event::Start(tag))
                     if tag.local_name().as_ref() == b"name" && name.is_none() =>
                 {
+                    tracing::debug!(?tag);
                     name = Some(reader.read_text(tag.to_end().name()).map(Name::new)?);
+                    tracing::debug!(?name);
                 }
                 (ResolveResult::Bound(XNM), Event::Start(tag))
                     if tag.local_name().as_ref() == b"term" =>
@@ -323,7 +325,7 @@ struct Term<'a> {
 }
 
 impl<'i> BorrowedReadXml<'i> for Term<'i> {
-    #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "debug")]
+    #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "trace")]
     fn borrowed_read_xml(
         reader: &mut NsReader<&'i [u8]>,
         start: &BytesStart<'_>,
@@ -337,19 +339,19 @@ impl<'i> BorrowedReadXml<'i> for Term<'i> {
                 (ResolveResult::Bound(XNM), Event::Start(tag))
                     if tag.local_name().as_ref() == b"name" && name.is_none() =>
                 {
-                    tracing::debug!(?tag);
+                    tracing::trace!(?tag);
                     name = Some(reader.read_text(tag.to_end().name())?);
                 }
                 (ResolveResult::Bound(XNM), Event::Start(tag))
                     if tag.local_name().as_ref() == b"from" && from.is_none() =>
                 {
-                    tracing::debug!(?tag);
+                    tracing::trace!(?tag);
                     from = Some(TermFrom::borrowed_read_xml(reader, &tag)?);
                 }
                 (ResolveResult::Bound(XNM), Event::Start(tag))
                     if tag.local_name().as_ref() == b"then" && !then =>
                 {
-                    tracing::debug!(?tag);
+                    tracing::trace!(?tag);
                     let end = tag.to_end();
                     let mut accept = false;
                     loop {
@@ -357,7 +359,7 @@ impl<'i> BorrowedReadXml<'i> for Term<'i> {
                             (ResolveResult::Bound(XNM), Event::Empty(tag))
                                 if tag.local_name().as_ref() == b"accept" && !accept =>
                             {
-                                tracing::debug!(?tag);
+                                tracing::trace!(?tag);
                                 accept = true;
                             }
                             (_, Event::Comment(_)) => continue,
@@ -458,7 +460,7 @@ impl TermFrom<'_> {
 }
 
 impl<'i> BorrowedReadXml<'i> for TermFrom<'i> {
-    #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "debug")]
+    #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "trace")]
     fn borrowed_read_xml(
         reader: &mut NsReader<&'i [u8]>,
         start: &BytesStart<'_>,
@@ -471,13 +473,13 @@ impl<'i> BorrowedReadXml<'i> for TermFrom<'i> {
                 (ResolveResult::Bound(XNM), Event::Start(tag))
                     if tag.local_name().as_ref() == b"family" && family.is_none() =>
                 {
-                    tracing::debug!(?tag);
+                    tracing::trace!(?tag);
                     family = Some(reader.read_text(tag.to_end().name())?);
                 }
                 (ResolveResult::Bound(XNM), Event::Start(tag))
                     if tag.local_name().as_ref() == b"route-filter" =>
                 {
-                    tracing::debug!(?tag);
+                    tracing::trace!(?tag);
                     let route_filter = RouteFilter::borrowed_read_xml(reader, &tag)?;
                     route_filters.push(route_filter);
                 }
@@ -505,7 +507,7 @@ struct RouteFilter<'i> {
 }
 
 impl<'i> BorrowedReadXml<'i> for RouteFilter<'i> {
-    #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "debug")]
+    #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "trace")]
     fn borrowed_read_xml(
         reader: &mut NsReader<&'i [u8]>,
         start: &BytesStart<'_>,
@@ -517,14 +519,14 @@ impl<'i> BorrowedReadXml<'i> for RouteFilter<'i> {
                 (ResolveResult::Bound(XNM), Event::Start(tag))
                     if tag.local_name().as_ref() == b"address" && address.is_none() =>
                 {
-                    tracing::debug!(?tag);
+                    tracing::trace!(?tag);
                     address = Some(reader.read_text(tag.to_end().name())?);
                 }
                 (ResolveResult::Bound(XNM), Event::Start(tag))
                     if tag.local_name().as_ref() == b"choice-ident"
                         && prefix_length_range.is_none() =>
                 {
-                    tracing::debug!(?tag);
+                    tracing::trace!(?tag);
                     let ident = reader.read_text(tag.to_end().name())?;
                     if ident.as_ref() != "prefix-length-range" {
                         return Err(ReadError::Other(
@@ -536,7 +538,7 @@ impl<'i> BorrowedReadXml<'i> for RouteFilter<'i> {
                             (ResolveResult::Bound(XNM), Event::Start(tag))
                                 if tag.local_name().as_ref() == b"choice-value" =>
                             {
-                                tracing::debug!(?tag);
+                                tracing::trace!(?tag);
                                 prefix_length_range = Some(reader.read_text(tag.to_end().name())?);
                                 break;
                             }
