@@ -119,7 +119,20 @@ pub(super) struct NetconfOpts {
 
     /// Override the domain name against which the NETCONF server's TLS certificate is verified.
     #[arg(long, value_parser = parse_server_name)]
+    #[cfg_attr(target_platform = "junos-freebsd", arg(default_value_os = hostname::get()))]
     tls_server_name: Option<ServerName<'static>>,
+}
+
+#[cfg(target_platform = "junos-freebsd")]
+mod hostname {
+    use once_cell::sync::Lazy;
+    use std::ffi::{OsStr, OsString};
+
+    static HOSTNAME: Lazy<OsString> = Lazy::new(gethostname::gethostname);
+
+    pub(super) fn get() -> &'static OsStr {
+        HOSTNAME.as_os_str()
+    }
 }
 
 fn parse_server_name(name: &str) -> anyhow::Result<ServerName<'static>> {
