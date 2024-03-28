@@ -93,7 +93,7 @@ impl FromStr for Frequency {
 pub(super) struct NetconfOpts {
     /// NETCONF server hostname or IP address.
     #[arg(long = "netconf-host", id = "netconf-host", value_name = "HOST")]
-    #[cfg_attr(target_platform = "junos-freebsd", arg(default_value = "127.0.0.1"))]
+    #[cfg_attr(target_platform = "junos-freebsd", arg(default_value = "localhost"))]
     host: String,
 
     /// NETCONF server port.
