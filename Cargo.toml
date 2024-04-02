@@ -5,6 +5,7 @@ resolver = "2"
 [workspace.package]
 version = "0.1.0-alpha.2"
 edition = "2021"
+rust-version = "1.75"
 authors = ["Ben Maddison <benm@workonline.africa>"]
 description = "A toolset for working with IRR data"
 license = "MIT"
