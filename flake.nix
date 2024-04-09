@@ -16,6 +16,22 @@
       url = "github:juniper/jetez/v1.0.7";
       flake = false;
     };
+    nightly-manifest = {
+      url = "https://static.rust-lang.org/dist/channel-rust-nightly.toml";
+      flake = false;
+    };
+    stable-manifest = {
+      url = "https://static.rust-lang.org/dist/channel-rust-stable.toml";
+      flake = false;
+    };
+    msrv-manifest = {
+      url = "https://static.rust-lang.org/dist/channel-rust-1.75.toml";
+      flake = false;
+    };
+    advisory-db = {
+      url = "github:rustsec/advisory-db";
+      flake = false;
+    };
   };
 
   outputs = { self, ... } @ inputs:
@@ -29,12 +45,17 @@
             inherit pkgs;
             inherit (inputs) jetez-src;
           };
-          rust = import ./nix/rust.nix {
+          rust = import ./nix/rust {
             inherit pkgs platforms;
-            inherit (inputs) crane fenix;
+            inherit (inputs)
+              crane fenix
+              nightly-manifest stable-manifest msrv-manifest
+              advisory-db;
           };
         in
         {
+          inherit (rust) checks;
+
           packages = with platforms; rec {
             cli = rust.buildPackage {
               pname = "bgpfu-cli";
