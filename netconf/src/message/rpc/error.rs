@@ -25,11 +25,13 @@ impl Errors {
         Self { inner: Vec::new() }
     }
 
-    pub(super) fn is_empty(&self) -> bool {
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
 
-    pub(super) fn len(&self) -> usize {
+    #[must_use]
+    pub fn len(&self) -> usize {
         self.inner.len()
     }
 
