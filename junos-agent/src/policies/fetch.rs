@@ -140,6 +140,9 @@ impl ReadXml for Maybe<Candidate> {
         // if both `active` and `comment` attributes are present on an object, then the JUNOS
         // NETCONF server emits duplicate `xmlns:jcmd` attributes.
         // duplicate attribute checks are disabled as a temporary workaround.
+        // TODO:
+        // avoid deleting previously installed policy-statement, if the running-config now has a
+        // malformed mp-filter expr.
         for attr in start.attributes().with_checks(false) {
             let attr = attr.map_err(|err| ReadError::Other(err.into()))?;
             match reader.resolve_attribute(attr.key) {
