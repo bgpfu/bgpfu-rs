@@ -107,7 +107,7 @@
     "nightly-manifest": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-Dxw2/8zVDQQ0byhRtmJcMsC2kcmhRpp7erc8NIxsKlQ=",
+        "narHash": "sha256-vRk1hsE2GWSBQdzEOv4c3zmakKbwKDCDAM/o1HO4vN8=",
         "type": "file",
         "url": "https://static.rust-lang.org/dist/channel-rust-nightly.toml"
       },
@@ -165,7 +165,7 @@
     "stable-manifest": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-6PpL1yqIWNrfbDKhQeFzhqjzIFTfP3pSbXf065CSkKs=",
+        "narHash": "sha256-o3ckRnKvxxyqYKYq4e3IHYFUf14FGo1YbBrDgbGOz9M=",
         "type": "file",
         "url": "https://static.rust-lang.org/dist/channel-rust-stable.toml"
       },
