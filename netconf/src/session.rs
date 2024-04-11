@@ -33,6 +33,9 @@ use crate::transport::Tls;
 #[cfg(feature = "ssh")]
 use crate::transport::{Password, Ssh};
 
+#[cfg(feature = "junos")]
+use crate::transport::JunosLocal;
+
 /// An identifier used by a NETCONF server to uniquely identify a session.
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -176,6 +179,17 @@ impl Session<Tls> {
     {
         tracing::info!("starting tls transport");
         let transport = Tls::connect(addr, server_name, ca_cert, client_cert, client_key).await?;
+        Self::new(transport).await
+    }
+}
+
+#[cfg(feature = "junos")]
+impl Session<JunosLocal> {
+    /// Establish a new NETCONF session via the local Junos `cli` binary.
+    #[tracing::instrument(level = "debug")]
+    pub async fn junos_local() -> Result<Self, Error> {
+        tracing::info!("starting local junos transport");
+        let transport = JunosLocal::connect().await?;
         Self::new(transport).await
     }
 }

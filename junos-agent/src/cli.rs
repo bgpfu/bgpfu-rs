@@ -6,7 +6,7 @@ use std::{fmt, path::Path};
 
 use anyhow::{anyhow, Context};
 
-use clap::{Args, Parser};
+use clap::{Args, Parser, Subcommand};
 
 use clap_verbosity_flag::{InfoLevel, Verbosity};
 
@@ -17,7 +17,10 @@ use tracing_log::AsTrace;
 use tracing_subscriber::EnvFilter;
 use ubyte::ByteUnit;
 
-use crate::task::Updater;
+use crate::{
+    netconf::{Local, Remote},
+    task::Updater,
+};
 
 /// Entry-point function for `bgpfu-junos-agent`.
 #[allow(clippy::missing_errors_doc)]
@@ -26,11 +29,24 @@ pub async fn main() -> anyhow::Result<()> {
 
     let _guard = args.logging.init()?;
 
-    let updater = Updater::new(args.netconf, args.irrd, args.junos);
+    // TODO: de-duplicate this!
+    match args.netconf {
+        None | Some(NetconfOpts::Local) => {
+            let updater = Updater::new(Local, args.irrd, args.junos);
 
-    match args.frequency {
-        Frequency::OneShot => updater.run().await,
-        Frequency::Daemon(frequency) => updater.init_loop(frequency).start().await,
+            match args.frequency {
+                Frequency::OneShot => updater.run().await,
+                Frequency::Daemon(frequency) => updater.init_loop(frequency).start().await,
+            }
+        }
+        Some(NetconfOpts::Remote(opts)) => {
+            let updater = Updater::new(Remote::new(opts), args.irrd, args.junos);
+
+            match args.frequency {
+                Frequency::OneShot => updater.run().await,
+                Frequency::Daemon(frequency) => updater.init_loop(frequency).start().await,
+            }
+        }
     }
 }
 
@@ -46,14 +62,14 @@ struct Cli {
     #[command(flatten, next_help_heading = "Junos options")]
     junos: JunosOpts,
 
-    #[command(flatten, next_help_heading = "NETCONF connection options")]
-    netconf: NetconfOpts,
-
     #[command(flatten, next_help_heading = "IRR connection options")]
     irrd: IrrdOpts,
 
     #[command(flatten, next_help_heading = "Logging options")]
     logging: LoggingOpts,
+
+    #[command(subcommand)]
+    netconf: Option<NetconfOpts>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -89,8 +105,18 @@ impl FromStr for Frequency {
     }
 }
 
+#[derive(Debug, Subcommand)]
+#[command(
+    subcommand_help_heading = "NETCONF target [default: local]",
+    subcommand_value_name = "TARGET"
+)]
+pub(super) enum NetconfOpts {
+    Local,
+    Remote(NetconfTlsOpts),
+}
+
 #[derive(Debug, Args)]
-pub(super) struct NetconfOpts {
+pub(super) struct NetconfTlsOpts {
     /// NETCONF server hostname or IP address.
     #[arg(long = "netconf-host", id = "netconf-host", value_name = "HOST")]
     #[cfg_attr(target_platform = "junos-freebsd", arg(default_value = "localhost"))]
@@ -140,7 +166,7 @@ fn parse_server_name(name: &str) -> anyhow::Result<ServerName<'static>> {
     Ok(parsed.to_owned())
 }
 
-impl NetconfOpts {
+impl NetconfTlsOpts {
     pub(super) fn host(&self) -> &str {
         &self.host
     }

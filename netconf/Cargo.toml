@@ -25,7 +25,11 @@ tls = [
     "tokio/macros",
     "tokio/net",
 ]
-junos = ["dep:chrono", "dep:paste"]
+junos = [
+    "dep:chrono",
+    "dep:paste",
+    "tokio/process",
+]
 
 [dependencies]
 async-trait.workspace = true

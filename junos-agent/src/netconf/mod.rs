@@ -1,4 +1,4 @@
-use std::{fmt::Debug, future::Future, marker::PhantomData, path::Path};
+use std::{fmt::Debug, future::Future, marker::PhantomData, sync::Arc};
 
 use anyhow::{anyhow, Context};
 use futures::TryFutureExt;
@@ -10,15 +10,88 @@ use netconf::{
         },
         Builder, Filter, GetConfig,
     },
-    transport::Tls,
+    transport::{JunosLocal, Tls, Transport},
     Session,
 };
 use rustls_pki_types::ServerName;
 
-use crate::policies::{Fetch, Load};
+use crate::{
+    cli::NetconfTlsOpts,
+    policies::{Fetch, Load},
+};
 
 mod pem;
 use self::pem::{read_cert, read_private_key};
+
+pub(crate) trait Target: Debug + Clone + Sized + Send {
+    type Transport: Transport;
+
+    fn connect(self) -> impl Future<Output = anyhow::Result<Client<Self, Closed>>> + Send;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Local;
+
+impl Target for Local {
+    type Transport = JunosLocal;
+
+    #[tracing::instrument(skip_all, level = "debug")]
+    async fn connect(self) -> anyhow::Result<Client<Self, Closed>> {
+        Session::junos_local()
+            .await
+            .context("failed to establish NETCONF session")
+            .map(|session| Client {
+                session,
+                _db_state: PhantomData,
+            })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct Remote {
+    opts: Arc<NetconfTlsOpts>,
+}
+
+impl Remote {
+    pub(crate) fn new(opts: NetconfTlsOpts) -> Self {
+        Self {
+            opts: Arc::new(opts),
+        }
+    }
+}
+
+impl Target for Remote {
+    type Transport = Tls;
+
+    #[tracing::instrument(skip_all, level = "debug")]
+    async fn connect(self) -> anyhow::Result<Client<Self, Closed>> {
+        let (host, port) = (self.opts.host(), self.opts.port());
+        tracing::debug!("trying to connect to NETCONF server at '{host}:{port}'");
+        let addr = (host, port);
+        let (ca_cert_path, client_cert_path, client_key_path) = (
+            self.opts.ca_cert_path(),
+            self.opts.client_cert_path(),
+            self.opts.client_key_path(),
+        );
+        tracing::debug!(?ca_cert_path, ?client_cert_path, ?client_key_path);
+        let (ca_cert, client_cert, client_key) = tokio::try_join!(
+            read_cert(ca_cert_path),
+            read_cert(client_cert_path),
+            read_private_key(client_key_path)
+        )?;
+        let server_name = match self.opts.tls_server_name() {
+            Some(name) => name,
+            None => ServerName::try_from(host)?.to_owned(),
+        };
+        Session::tls(addr, server_name, ca_cert, client_cert, client_key)
+            .await
+            .context("failed to establish NETCONF session")
+            .map(|session| Client {
+                session,
+                _db_state: PhantomData,
+            })
+    }
+}
 
 #[derive(Debug)]
 pub(crate) enum Closed {}
@@ -27,44 +100,14 @@ pub(crate) enum Closed {}
 pub(crate) enum Open {}
 
 #[derive(Debug)]
-pub(crate) struct Client<S> {
-    session: Session<Tls>,
+pub(crate) struct Client<T: Target, S> {
+    session: Session<T::Transport>,
     _db_state: PhantomData<S>,
 }
 
-impl Client<Closed> {
-    #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) async fn connect(
-        host: &str,
-        port: u16,
-        ca_cert_path: &Path,
-        client_cert_path: &Path,
-        client_key_path: &Path,
-        server_name: Option<ServerName<'static>>,
-    ) -> anyhow::Result<Self> {
-        tracing::debug!("trying to connect to NETCONF server at '{host}:{port}'");
-        let addr = (host, port);
-        tracing::debug!(?ca_cert_path, ?client_cert_path, ?client_key_path);
-        let (ca_cert, client_cert, client_key) = tokio::try_join!(
-            read_cert(ca_cert_path),
-            read_cert(client_cert_path),
-            read_private_key(client_key_path)
-        )?;
-        let server_name = match server_name {
-            Some(name) => name,
-            None => ServerName::try_from(host)?.to_owned(),
-        };
-        Session::tls(addr, server_name, ca_cert, client_cert, client_key)
-            .await
-            .context("failed to establish NETCONF session")
-            .map(|session| Self {
-                session,
-                _db_state: PhantomData,
-            })
-    }
-
+impl<T: Target> Client<T, Closed> {
     #[tracing::instrument(skip(self), level = "debug")]
-    pub(crate) async fn open_db(mut self, name: &str) -> anyhow::Result<Client<Open>> {
+    pub(crate) async fn open_db(mut self, name: &str) -> anyhow::Result<Client<T, Open>> {
         tracing::debug!("trying to open ephemeral database");
         self.session
             .rpc::<OpenConfiguration, _>(|builder| builder.ephemeral(Some(name)).finish())
@@ -90,21 +133,21 @@ impl Client<Closed> {
     }
 }
 
-impl Client<Open> {
+impl<T: Target> Client<T, Open> {
     #[tracing::instrument(skip(self), level = "debug")]
-    pub(crate) async fn fetch_config<T>(
+    pub(crate) async fn fetch_config<R>(
         &mut self,
-    ) -> anyhow::Result<impl Future<Output = anyhow::Result<T>>>
+    ) -> anyhow::Result<impl Future<Output = anyhow::Result<R>>>
     where
-        T: Fetch,
+        R: Fetch,
     {
         tracing::debug!("trying to fetch configuration");
         let future = self
             .session
-            .rpc::<GetConfig<T>, _>(|builder| {
+            .rpc::<GetConfig<R>, _>(|builder| {
                 builder
-                    .source(T::DATASTORE)?
-                    .filter(T::FILTER.map(|filter| Filter::Subtree(filter.to_string())))?
+                    .source(R::DATASTORE)?
+                    .filter(R::FILTER.map(|filter| Filter::Subtree(filter.to_string())))?
                     .finish()
             })
             .await
@@ -114,9 +157,9 @@ impl Client<Open> {
     }
 
     #[tracing::instrument(skip(self, config), level = "debug")]
-    pub(crate) async fn load_config<T>(&mut self, config: T) -> anyhow::Result<&mut Self>
+    pub(crate) async fn load_config<C>(&mut self, config: C) -> anyhow::Result<&mut Self>
     where
-        T: Load,
+        C: Load,
     {
         tracing::debug!("trying to load candidate configuration");
         tracing::trace!(?config);
@@ -154,7 +197,7 @@ impl Client<Open> {
 
     #[allow(clippy::redundant_closure_for_method_calls)]
     #[tracing::instrument(skip(self), level = "debug")]
-    pub(crate) async fn close_db(mut self) -> anyhow::Result<Client<Closed>> {
+    pub(crate) async fn close_db(mut self) -> anyhow::Result<Client<T, Closed>> {
         tracing::debug!("trying to close candidate configuration");
         self.session
             .rpc::<CloseConfiguration, _>(|builder| builder.finish())

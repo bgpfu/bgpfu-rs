@@ -11,30 +11,30 @@ use tokio::{
 };
 
 use crate::{
-    cli::{IrrdOpts, JunosOpts, NetconfOpts},
-    netconf::Client,
+    cli::{IrrdOpts, JunosOpts},
+    netconf::Target,
     policies::{Candidate, Evaluate, Installed, Policies},
 };
 
 #[derive(Debug, Clone)]
-pub(crate) struct Updater {
-    netconf: Arc<NetconfOpts>,
+pub(crate) struct Updater<T> {
+    target: T,
     irrd: Arc<IrrdOpts>,
     junos: Arc<JunosOpts>,
 }
 
-impl Updater {
+impl<T: Target + 'static> Updater<T> {
     #[tracing::instrument(level = "debug")]
-    pub(crate) fn new(netconf: NetconfOpts, irrd: IrrdOpts, junos: JunosOpts) -> Self {
+    pub(crate) fn new(target: T, irrd: IrrdOpts, junos: JunosOpts) -> Self {
         Self {
-            netconf: Arc::new(netconf),
+            target,
             irrd: Arc::new(irrd),
             junos: Arc::new(junos),
         }
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
-    pub(crate) fn init_loop(self, frequency: NonZeroU64) -> Loop {
+    pub(crate) fn init_loop(self, frequency: NonZeroU64) -> Loop<T> {
         Loop {
             updater: self,
             period: Duration::from_secs(frequency.into()),
@@ -45,19 +45,14 @@ impl Updater {
     pub(crate) async fn run(self) -> anyhow::Result<()> {
         tracing::info!("starting update");
 
-        let mut netconf_client = Client::connect(
-            self.netconf.host(),
-            self.netconf.port(),
-            self.netconf.ca_cert_path(),
-            self.netconf.client_cert_path(),
-            self.netconf.client_key_path(),
-            self.netconf.tls_server_name(),
-        )
-        .await
-        .context("failed to establish NETCONF session")?
-        .open_db(self.junos.ephemeral_db())
-        .await
-        .context("failed to open ephemeral database")?;
+        let mut netconf_client = self
+            .target
+            .connect()
+            .await
+            .context("failed to establish NETCONF session")?
+            .open_db(self.junos.ephemeral_db())
+            .await
+            .context("failed to open ephemeral database")?;
 
         let evaluate_candidates = netconf_client
             .fetch_config::<Policies<Candidate>>()
@@ -131,14 +126,14 @@ impl Updater {
     }
 }
 
-pub(crate) struct Loop {
-    updater: Updater,
+pub(crate) struct Loop<T> {
+    updater: Updater<T>,
     period: Duration,
 }
 
 const MIN_BACKOFF: Duration = Duration::from_secs(60);
 
-impl Loop {
+impl<T: Target + 'static> Loop<T> {
     #[tracing::instrument(skip(self), level = "trace")]
     pub(crate) async fn start(self) -> anyhow::Result<()> {
         tracing::info!("starting updater loop with frequency {:?}", self.period);
