@@ -1,4 +1,4 @@
-use std::{num::NonZeroU64, sync::Arc};
+use std::{cmp::min, num::NonZeroU64, sync::Arc};
 
 use anyhow::Context;
 
@@ -170,7 +170,8 @@ impl<T: Target + 'static> Loop<T> {
                         Err(err) => {
                             tracing::error!("updater job failed: {err:#}");
                             interval.reset_after(backoff);
-                            backoff *= 2;
+                            tracing::info!("trying in {} seconds", backoff.as_secs());
+                            backoff = min(self.period, backoff * 2);
                         }
                     }
                 }
