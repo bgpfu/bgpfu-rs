@@ -47,16 +47,14 @@ pub struct Builder<'a> {
 
 impl Builder<'_> {
     pub fn session_id(mut self, session_id: u32) -> Result<Self, Error> {
-        SessionId::new(session_id)
-            .ok_or_else(|| Error::InvalidSessionId(session_id))
-            .and_then(|session_id| {
-                if session_id == self.ctx.session_id() {
-                    Err(Error::KillCurrentSession)
-                } else {
-                    self.session_id.set(session_id);
-                    Ok(self)
-                }
-            })
+        SessionId::new(session_id).and_then(|session_id| {
+            if session_id == self.ctx.session_id() {
+                Err(Error::KillCurrentSession)
+            } else {
+                self.session_id.set(session_id);
+                Ok(self)
+            }
+        })
     }
 }
 

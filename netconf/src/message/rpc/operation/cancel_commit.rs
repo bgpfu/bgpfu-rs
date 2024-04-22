@@ -55,11 +55,11 @@ impl Builder<'_> {
             self.persist_id = token;
             Ok(self)
         } else {
-            Err(Error::UnsupportedOperationParameter(
-                CancelCommit::NAME,
-                "persist-id",
+            Err(Error::UnsupportedOperationParameter {
+                operation_name: CancelCommit::NAME,
+                param_name: "persist-id",
                 required_capabilities,
-            ))
+            })
         }
     }
 }

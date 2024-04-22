@@ -36,7 +36,10 @@ pub trait Operation: Debug + WriteXml + Send + Sync + Sized {
         Self::REQUIRED_CAPABILITIES
             .check(ctx.server_capabilities())
             .then(|| Self::Builder::new(ctx).build(build_fn))
-            .ok_or_else(|| Error::UnsupportedOperation(Self::NAME, Self::REQUIRED_CAPABILITIES))?
+            .ok_or_else(|| Error::UnsupportedOperation {
+                operation_name: Self::NAME,
+                required_capabilities: Self::REQUIRED_CAPABILITIES,
+            })?
     }
 }
 
@@ -123,7 +126,10 @@ impl Datastore {
         if required_capabilities.check(ctx.server_capabilities()) {
             Ok(self)
         } else {
-            Err(Error::UnsupportedSource(self, required_capabilities))
+            Err(Error::UnsupportedSource {
+                datastore: self,
+                required_capabilities,
+            })
         }
     }
 
@@ -136,7 +142,10 @@ impl Datastore {
         if required_capabilities.check(ctx.server_capabilities()) {
             Ok(self)
         } else {
-            Err(Error::UnsupportedTarget(self, required_capabilities))
+            Err(Error::UnsupportedTarget {
+                datastore: self,
+                required_capabilities,
+            })
         }
     }
 
@@ -149,7 +158,10 @@ impl Datastore {
         if required_capabilities.check(ctx.server_capabilities()) {
             Ok(self)
         } else {
-            Err(Error::UnsupportedLockTarget(self, required_capabilities))
+            Err(Error::UnsupportedLockTarget {
+                datastore: self,
+                required_capabilities,
+            })
         }
     }
 
@@ -218,10 +230,10 @@ impl Filter {
         if required_capabilities.check(ctx.server_capabilities()) {
             Ok(self)
         } else {
-            Err(Error::UnsupportedFilterType(
-                self.as_str(),
+            Err(Error::UnsupportedFilterType {
+                filter: self.as_str(),
                 required_capabilities,
-            ))
+            })
         }
     }
 }
@@ -315,7 +327,7 @@ impl Url {
             })
             .flatten()
             .find(|&scheme| url.scheme_str() == scheme.as_ref())
-            .ok_or_else(|| Error::UnsupportedUrlScheme(url.into()))
+            .ok_or_else(|| Error::UnsupportedUrlScheme { url: url.into() })
             .map(|_| Self { inner: url.into() })
     }
 }

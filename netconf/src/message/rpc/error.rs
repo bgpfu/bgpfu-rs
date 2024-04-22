@@ -410,8 +410,8 @@ impl ReadXml for Info {
                                 .read_text(tag.to_end().name())?
                                 .as_ref()
                                 .parse()
-                                .map(SessionId::new)
-                                .map_err(ReadError::SessionIdParse)?,
+                                .map_err(ReadError::SessionIdParse)
+                                .map(|session_id| SessionId::new(session_id).ok())?,
                         )),
                         b"ok-element" => inner.push(InfoElement::OkElement(
                             reader.read_text(tag.to_end().name())?.as_ref().into(),

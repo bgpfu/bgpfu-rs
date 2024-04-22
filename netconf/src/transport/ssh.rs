@@ -44,7 +44,7 @@ impl Ssh {
                 .authenticate_password(username.clone(), password.into_inner())
                 .await?
             {
-                return Err(Error::Authentication(username));
+                return Err(Error::Authentication { username });
             };
             tracing::info!("ssh authentication sucessful");
             session

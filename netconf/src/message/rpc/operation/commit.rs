@@ -121,12 +121,10 @@ impl Builder<'_> {
         required_capabilities
             .check(self.ctx.server_capabilities())
             .then_some(())
-            .ok_or_else(|| {
-                Error::UnsupportedOperationParameter(
-                    Commit::NAME,
-                    param_name,
-                    required_capabilities,
-                )
+            .ok_or_else(|| Error::UnsupportedOperationParameter {
+                operation_name: Commit::NAME,
+                param_name,
+                required_capabilities,
             })
     }
 }
@@ -144,16 +142,16 @@ impl<'a> super::Builder<'a, Commit> for Builder<'a> {
 
     fn finish(self) -> Result<Commit, Error> {
         if self.confirmed && self.persist_id.is_some() {
-            return Err(Error::IncompatibleOperationParameters(
-                "commit",
-                vec!["confirmed = true", "persist-id"],
-            ));
+            return Err(Error::IncompatibleOperationParameters {
+                operation_name: Commit::NAME,
+                parameters: vec!["confirmed = true", "persist-id"],
+            });
         }
         if !self.confirmed && self.persist.is_some() {
-            return Err(Error::IncompatibleOperationParameters(
-                "commit",
-                vec!["confirmed = false", "persist"],
-            ));
+            return Err(Error::IncompatibleOperationParameters {
+                operation_name: Commit::NAME,
+                parameters: vec!["confirmed = false", "persist"],
+            });
         }
         Ok(Commit {
             confirmed: self.confirmed,

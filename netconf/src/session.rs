@@ -42,8 +42,10 @@ use crate::transport::JunosLocal;
 pub struct SessionId(NonZeroU32);
 
 impl SessionId {
-    pub(crate) fn new(n: u32) -> Option<Self> {
-        NonZeroU32::new(n).map(Self)
+    pub(crate) fn new(n: u32) -> Result<Self, Error> {
+        NonZeroU32::new(n)
+            .ok_or_else(|| Error::InvalidSessionId { session_id: n })
+            .map(Self)
     }
 }
 
@@ -267,7 +269,7 @@ impl<T: Transport> Session<T> {
             .map(|operation| rpc::Request::new(message_id, operation))?;
         #[allow(clippy::significant_drop_in_scrutinee)]
         match self.requests.lock().await.entry(message_id) {
-            Entry::Occupied(_) => return Err(Error::MessageIdCollision(message_id)),
+            Entry::Occupied(_) => return Err(Error::MessageIdCollision { message_id }),
             Entry::Vacant(entry) => {
                 request.send(&mut *self.transport_tx.lock().await).await?;
                 _ = entry.insert(OutstandingRequest::Pending);
@@ -298,7 +300,7 @@ impl<T: Transport> Session<T> {
                 .lock()
                 .await
                 .get_mut(&message_id)
-                .ok_or_else(|| Error::RequestNotFound(message_id))?
+                .ok_or_else(|| Error::RequestNotFound { message_id })?
                 .take()?
             {
                 tracing::debug!("found ready response");
@@ -312,11 +314,14 @@ impl<T: Transport> Session<T> {
                 .lock()
                 .await
                 .get_mut(&reply.message_id())
-                .ok_or_else(|| Error::RequestNotFound(reply.message_id()))?
-            {
+                .ok_or_else(|| Error::RequestNotFound {
+                    message_id: reply.message_id(),
+                })? {
                 OutstandingRequest::Complete => break Err(Error::RequestComplete),
                 OutstandingRequest::Ready(_) => {
-                    break Err(Error::MessageIdCollision(reply.message_id()))
+                    break Err(Error::MessageIdCollision {
+                        message_id: reply.message_id(),
+                    })
                 }
                 pending @ OutstandingRequest::Pending => {
                     tracing::debug!("storing response to {:?}", reply.message_id());

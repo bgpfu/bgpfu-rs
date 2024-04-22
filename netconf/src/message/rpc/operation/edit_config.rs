@@ -220,12 +220,12 @@ impl TestOption {
         if required_capabilities.check(ctx.server_capabilities()) {
             Ok(self)
         } else {
-            Err(Error::UnsupportedOperParameterValue(
-                EditConfig::<D>::NAME,
-                "<test-option>",
-                self.as_str(),
+            Err(Error::UnsupportedOperParameterValue {
+                operation_name: EditConfig::<D>::NAME,
+                param_name: "test-option",
+                param_value: self.as_str(),
                 required_capabilities,
-            ))
+            })
         }
     }
 }
@@ -262,12 +262,12 @@ impl ErrorOption {
         if required_capabilities.check(ctx.server_capabilities()) {
             Ok(self)
         } else {
-            Err(Error::UnsupportedOperParameterValue(
-                EditConfig::<D>::NAME,
-                "<error-option>",
-                self.as_str(),
+            Err(Error::UnsupportedOperParameterValue {
+                operation_name: EditConfig::<D>::NAME,
+                param_name: "error-option",
+                param_value: self.as_str(),
                 required_capabilities,
-            ))
+            })
         }
     }
 }

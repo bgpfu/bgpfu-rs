@@ -12,7 +12,6 @@ use crate::{
     },
 };
 
-// TODO: name non-source fields
 /// `netconf` library error variants
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -47,8 +46,11 @@ pub enum Error {
     // Session establishment //
     //
     /// User authentication failed.
-    #[error("authentication failed for user {0}")]
-    Authentication(String),
+    #[error("authentication failed for user {username}")]
+    Authentication {
+        /// User name provided during failed authentication attempt.
+        username: String,
+    },
 
     /// Base protocol version negotiation failed.
     #[error("failed to negotiate a common base protocol version")]
@@ -58,11 +60,17 @@ pub enum Error {
     //
     /// A `message-id` collision was detected.
     #[error("encountered a 'message-id' collision. please file a bug report!")]
-    MessageIdCollision(rpc::MessageId),
+    MessageIdCollision {
+        /// `message-id` for which a collision was detected.
+        message_id: rpc::MessageId,
+    },
 
     /// Received a message with an unknown `message-id`.
-    #[error("request with message-id '{0:?}' not found")]
-    RequestNotFound(rpc::MessageId),
+    #[error("request with message-id '{message_id:?}' not found")]
+    RequestNotFound {
+        /// `message-id` received in server message.
+        message_id: rpc::MessageId,
+    },
 
     /// Attempted to process an already completed request.
     #[error("attempted to poll for an already completed request")]
@@ -87,44 +95,93 @@ pub enum Error {
     DeleteRunningConfig,
 
     /// Invalid `session-id`.
-    #[error("invalid session-id: {0}")]
-    InvalidSessionId(u32),
+    #[error("invalid session-id: {session_id}")]
+    InvalidSessionId {
+        /// Invalid `session-id` value.
+        session_id: u32,
+    },
 
     /// Attempted to perform `kill-session` operation targeting the current session.
     #[error("kill-session operation targeting the current session is not permitted")]
     KillCurrentSession,
 
     /// Attempted to perform an unsupported operation.
-    #[error("unsupported rpc operation '{0}' (requires {1})")]
-    UnsupportedOperation(&'static str, Requirements),
+    #[error("unsupported rpc operation '{operation_name}' (requires {required_capabilities})")]
+    UnsupportedOperation {
+        /// RPC operation name.
+        operation_name: &'static str,
+        /// Required server capabilities.
+        required_capabilities: Requirements,
+    },
 
     /// Attempted to set an unsupported operation parameter.
-    #[error("unsupported parameter '{1}' for rpc operation '{0}' (requires {2})")]
-    UnsupportedOperationParameter(&'static str, &'static str, Requirements),
+    #[error("unsupported parameter '{param_name}' for rpc operation '{operation_name}' (requires {required_capabilities})")]
+    UnsupportedOperationParameter {
+        /// RPC operation name.
+        operation_name: &'static str,
+        /// Unsupported operation parameter.
+        param_name: &'static str,
+        /// Required server capabilities.
+        required_capabilities: Requirements,
+    },
 
     /// Attempted to set an operation parameter to an unsupported value.
-    #[error("unsupported value '{2}' of parameter '{1}' for rpc operation '{0}' (requires {3})")]
-    UnsupportedOperParameterValue(&'static str, &'static str, &'static str, Requirements),
+    #[error("unsupported value '{param_value}' of parameter '{param_name}' for rpc operation '{operation_name}' (requires {required_capabilities})")]
+    UnsupportedOperParameterValue {
+        /// RPC operation name.
+        operation_name: &'static str,
+        /// Operation parameter.
+        param_name: &'static str,
+        /// Unsupported parameter value.
+        param_value: &'static str,
+        /// Required server capabilities.
+        required_capabilities: Requirements,
+    },
 
     /// Attempted to perform an operation on an unsupported `source` datastore.
-    #[error("unsupported source datastore '{0:?}' (requires {1})")]
-    UnsupportedSource(Datastore, Requirements),
+    #[error("unsupported source datastore '{datastore:?}' (requires {required_capabilities})")]
+    UnsupportedSource {
+        /// Source datastore.
+        datastore: Datastore,
+        /// Required server capabilities.
+        required_capabilities: Requirements,
+    },
 
     /// Attempted to perform an operation on an unsupported `target` datastore.
-    #[error("unsupported target datastore '{0:?}' (requires {1})")]
-    UnsupportedTarget(Datastore, Requirements),
+    #[error("unsupported target datastore '{datastore:?}' (requires {required_capabilities})")]
+    UnsupportedTarget {
+        /// Target datastore.
+        datastore: Datastore,
+        /// Required server capabilities.
+        required_capabilities: Requirements,
+    },
 
     /// Attempted to `lock` an unsupported datastore.
-    #[error("unsupported lock target datastore '{0:?}' (requires {1})")]
-    UnsupportedLockTarget(Datastore, Requirements),
+    #[error(
+        "unsupported lock target datastore '{datastore:?}' (requires {required_capabilities})"
+    )]
+    UnsupportedLockTarget {
+        /// Target datastore.
+        datastore: Datastore,
+        /// Required server capabilities.
+        required_capabilities: Requirements,
+    },
 
     /// Unsupported URL scheme.
-    #[error("unsupported scheme in url '{0}' (requires ':url:1.0' capability with corresponding 'scheme' parameter)")]
-    UnsupportedUrlScheme(Box<UriStr>),
+    #[error("unsupported scheme in url '{url}' (requires ':url:1.0' capability with corresponding 'scheme' parameter)")]
+    UnsupportedUrlScheme {
+        /// Unsupported URL.
+        url: Box<UriStr>,
+    },
 
     /// Unsupported `filter` type.
-    #[error("unsupported filter type '{0}' (requires {1})")]
-    UnsupportedFilterType(&'static str, Requirements),
+    #[error("unsupported filter type '{filter}' (requires {required_capabilities})")]
+    UnsupportedFilterType {
+        /// Unsupported filter type.
+        filter: &'static str,
+        /// Required server capabilities.
+        required_capabilities: Requirements,
+    },
 
     /// Missing a required operation parameter.
     #[error("missing required parameter {param_name} for rpc operation {operation_name}")]
@@ -136,8 +193,13 @@ pub enum Error {
     },
 
     /// Incompatible combination of operation parameters.
-    #[error("incompatible parameter combination for operation '{0}': {}", .1.join(", "))]
-    IncompatibleOperationParameters(&'static str, Vec<&'static str>),
+    #[error("incompatible parameter combination for operation '{0}': {}", .parameters.join(", "))]
+    IncompatibleOperationParameters {
+        /// RPC operation name.
+        operation_name: &'static str,
+        /// Required server capabilities.
+        parameters: Vec<&'static str>,
+    },
 
     /// Failed to parse a URL
     #[error("failed to parse URI")]
