@@ -121,7 +121,7 @@ impl Builder<'_> {
         required_capabilities
             .check(self.ctx.server_capabilities())
             .then_some(())
-            .ok_or_else(|| Error::UnsupportedOperationParameter {
+            .ok_or(Error::UnsupportedOperationParameter {
                 operation_name: Commit::NAME,
                 param_name,
                 required_capabilities,

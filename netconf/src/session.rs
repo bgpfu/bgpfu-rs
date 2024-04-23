@@ -44,7 +44,7 @@ pub struct SessionId(NonZeroU32);
 impl SessionId {
     pub(crate) fn new(n: u32) -> Result<Self, Error> {
         NonZeroU32::new(n)
-            .ok_or_else(|| Error::InvalidSessionId { session_id: n })
+            .ok_or(Error::InvalidSessionId { session_id: n })
             .map(Self)
     }
 }
@@ -300,7 +300,7 @@ impl<T: Transport> Session<T> {
                 .lock()
                 .await
                 .get_mut(&message_id)
-                .ok_or_else(|| Error::RequestNotFound { message_id })?
+                .ok_or(Error::RequestNotFound { message_id })?
                 .take()?
             {
                 tracing::debug!("found ready response");

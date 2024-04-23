@@ -36,7 +36,7 @@ pub trait Operation: Debug + WriteXml + Send + Sync + Sized {
         Self::REQUIRED_CAPABILITIES
             .check(ctx.server_capabilities())
             .then(|| Self::Builder::new(ctx).build(build_fn))
-            .ok_or_else(|| Error::UnsupportedOperation {
+            .ok_or(Error::UnsupportedOperation {
                 operation_name: Self::NAME,
                 required_capabilities: Self::REQUIRED_CAPABILITIES,
             })?
