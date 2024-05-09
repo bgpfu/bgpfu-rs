@@ -29,6 +29,39 @@ jobs:
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  build-junos-agent:
+    name: build-junos-agent
+    needs:
+      - lint
+      - test
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: install nix
+        uses: cachix/install-nix-action@v26
+      - name: enable nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v2
+      - name: set-up signing certs
+        run: |
+          mkdir /tmp/certs
+          chmod 0750 /tmp/certs
+          echo -n "${JUNOS_VERIEXEC_KEY}" >/tmp/certs/key.pem
+          echo -n "${JUNOS_VERIEXEC_CERT}" >/tmp/certs/cert.pem
+          chown 0640 /tmp/certs/*.pem
+          chgrp -R nixbld /tmp/certs
+        env:
+          JUNOS_VERIEXEC_KEY: ${{ secrets.JUNOS_VERIEXEC_KEY }}
+          JUNOS_VERIEXEC_CERT: ${{ secrets.JUNOS_VERIEXEC_CERT }}
+      - name: build package
+        run: |
+          nix build .#junos-agent --extra-sandbox-paths "/certs=/tmp/certs"
+      - name: upload package artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: junos-agent
+          path: result/
+
   publish-lib:
     name: publish-lib
     if: ${{ github.event_name == 'push' &&
