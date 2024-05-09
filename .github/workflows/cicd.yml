@@ -42,6 +42,19 @@ jobs:
     secrets:
       CRATES_TOKEN: ${{ secrets.CRATES_TOKEN }}
 
+  publish-netconf:
+    name: publish-netconf
+    if: ${{ github.event_name == 'push' &&
+            startsWith(github.ref, 'refs/tag') }}
+    needs:
+      - lint
+      - test
+    uses: wolcomm/.github/.github/workflows/rust-publish.yml@master
+    with:
+      package: bgpfu-netconf
+    secrets:
+      CRATES_TOKEN: ${{ secrets.CRATES_TOKEN }}
+
   publish-cli:
     name: publish-cli
     if: ${{ github.event_name == 'push' &&
