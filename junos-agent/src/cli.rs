@@ -119,7 +119,6 @@ pub(super) enum NetconfOpts {
 pub(super) struct NetconfTlsOpts {
     /// NETCONF server hostname or IP address.
     #[arg(long = "netconf-host", id = "netconf-host", value_name = "HOST")]
-    #[cfg_attr(target_platform = "junos-freebsd", arg(default_value = "localhost"))]
     host: String,
 
     /// NETCONF server port.
@@ -145,20 +144,7 @@ pub(super) struct NetconfTlsOpts {
 
     /// Override the domain name against which the NETCONF server's TLS certificate is verified.
     #[arg(long, value_parser = parse_server_name)]
-    #[cfg_attr(target_platform = "junos-freebsd", arg(default_value_os = hostname::get()))]
     tls_server_name: Option<ServerName<'static>>,
-}
-
-#[cfg(target_platform = "junos-freebsd")]
-mod hostname {
-    use once_cell::sync::Lazy;
-    use std::ffi::{OsStr, OsString};
-
-    static HOSTNAME: Lazy<OsString> = Lazy::new(gethostname::gethostname);
-
-    pub(super) fn get() -> &'static OsStr {
-        HOSTNAME.as_os_str()
-    }
 }
 
 fn parse_server_name(name: &str) -> anyhow::Result<ServerName<'static>> {
@@ -192,14 +178,7 @@ impl NetconfTlsOpts {
     }
 
     fn default_pki_path<P: AsRef<Path>>(file_name: P) -> PathBuf {
-        let pki_dir = if cfg!(target_platform = "junos-freebsd") {
-            // TODO:
-            // Is this the right place to keep these?
-            // Is there a way of using the Junos PKI infrastructure?
-            Path::new("/var/db/bgpfu")
-        } else {
-            Path::new("./certs")
-        };
+        let pki_dir = Path::new("./certs");
         pki_dir.join(file_name)
     }
 }
@@ -237,8 +216,9 @@ impl LoggingOpts {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 enum LoggingDest<T> {
+    #[default]
     StdErr,
     File(T),
 }
@@ -248,16 +228,6 @@ impl<T> LoggingDest<T> {
         match self {
             Self::StdErr => true,
             Self::File(_) => false,
-        }
-    }
-}
-
-impl Default for LoggingDest<PathBuf> {
-    fn default() -> Self {
-        if cfg!(target_platform = "junos-freebsd") {
-            Self::File("/var/log/bgpfu-junos-agent.log".into())
-        } else {
-            Self::StdErr
         }
     }
 }

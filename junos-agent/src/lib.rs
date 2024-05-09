@@ -55,9 +55,3 @@ mod task;
 mod deps {
     use version_sync as _;
 }
-
-#[cfg(not(target_platform = "junos-freebsd"))]
-mod platform_deps {
-    use gethostname as _;
-    use once_cell as _;
-}
