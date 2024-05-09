@@ -48,7 +48,7 @@ jobs:
           chmod 0750 /tmp/certs
           echo -n "${JUNOS_VERIEXEC_KEY}" >/tmp/certs/key.pem
           echo -n "${JUNOS_VERIEXEC_CERT}" >/tmp/certs/cert.pem
-          chgrp -R nixbld /tmp/certs
+          sudo chgrp -R nixbld /tmp/certs
           chmod 0640 /tmp/certs/*.pem
         env:
           JUNOS_VERIEXEC_KEY: ${{ secrets.JUNOS_VERIEXEC_KEY }}
