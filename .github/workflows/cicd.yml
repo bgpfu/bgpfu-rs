@@ -57,7 +57,7 @@ jobs:
         run: |
           nix build .#junos-agent --extra-sandbox-paths "/certs=/tmp/certs"
       - name: upload package artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: junos-agent
           path: result/
