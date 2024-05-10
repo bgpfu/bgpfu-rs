@@ -72,8 +72,7 @@ jobs:
     name: publish-release-artifacts
     if: github.event_name == 'release'
     needs:
-      - lint
-      - test
+      - build-junos-agent
     runs-on: ubuntu-latest
     steps:
       - name: checkout
