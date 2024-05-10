@@ -188,7 +188,7 @@ dependencies = [
 
 [[package]]
 name = "bgpfu-cli"
-version = "0.1.0-alpha.2"
+version = "0.1.0-rc.1"
 dependencies = [
  "anyhow",
  "bgpfu-lib",
@@ -203,7 +203,7 @@ dependencies = [
 
 [[package]]
 name = "bgpfu-junos-agent"
-version = "0.1.0-alpha.2"
+version = "0.1.0-rc.1"
 dependencies = [
  "anyhow",
  "bgpfu-lib",
@@ -229,7 +229,7 @@ dependencies = [
 
 [[package]]
 name = "bgpfu-lib"
-version = "0.1.0-alpha.2"
+version = "0.1.0-rc.1"
 dependencies = [
  "generic-ip",
  "irrc",
@@ -241,7 +241,7 @@ dependencies = [
 
 [[package]]
 name = "bgpfu-netconf"
-version = "0.1.0-alpha.2"
+version = "0.1.0-rc.1"
 dependencies = [
  "anyhow",
  "async-trait",

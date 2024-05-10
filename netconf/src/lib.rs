@@ -1,5 +1,5 @@
 //! Netconf client library
-#![doc(html_root_url = "https://docs.rs/bgpfu-netconf/0.1.0-alpha.2")]
+#![doc(html_root_url = "https://docs.rs/bgpfu-netconf/0.1.0-rc.1")]
 // clippy lints
 #![warn(clippy::pedantic)]
 #![warn(clippy::cargo)]

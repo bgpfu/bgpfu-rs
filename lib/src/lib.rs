@@ -1,5 +1,5 @@
 //! Support library for `bgpfu`.
-#![doc(html_root_url = "https://docs.rs/bgpfu-lib/0.1.0-alpha.2")]
+#![doc(html_root_url = "https://docs.rs/bgpfu-lib/0.1.0-rc.1")]
 // clippy lints
 #![warn(clippy::pedantic)]
 #![warn(clippy::cargo)]
