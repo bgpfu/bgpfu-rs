@@ -92,8 +92,7 @@ jobs:
     name: publish-lib
     if: github.event_name == 'release'
     needs:
-      - lint
-      - test
+      - publish-release-artifacts
     uses: wolcomm/.github/.github/workflows/rust-publish.yml@master
     with:
       package: bgpfu-lib
@@ -104,8 +103,7 @@ jobs:
     name: publish-netconf
     if: github.event_name == 'release'
     needs:
-      - lint
-      - test
+      - publish-release-artifacts
     uses: wolcomm/.github/.github/workflows/rust-publish.yml@master
     with:
       package: bgpfu-netconf
