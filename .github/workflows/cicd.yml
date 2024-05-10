@@ -3,6 +3,8 @@ name: "CI/CD"
 on:
   - push
   - pull_request
+  - release:
+      types: [published]
 
 jobs:
 
@@ -62,10 +64,30 @@ jobs:
           name: junos-agent
           path: result/
 
+  publish-release-artifacts:
+    name: publish-release-artifacts
+    if: github.event_name == 'release'
+    needs:
+      - lint
+      - test
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: junos-agent
+          path: artifacts
+      - name: update release artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          files: "artifacts/*"
+
   publish-lib:
     name: publish-lib
-    if: ${{ github.event_name == 'push' &&
-            startsWith(github.ref, 'refs/tag') }}
+    if: github.event_name == 'release'
     needs:
       - lint
       - test
@@ -77,8 +99,7 @@ jobs:
 
   publish-netconf:
     name: publish-netconf
-    if: ${{ github.event_name == 'push' &&
-            startsWith(github.ref, 'refs/tag') }}
+    if: github.event_name == 'release'
     needs:
       - lint
       - test
@@ -90,8 +111,7 @@ jobs:
 
   publish-cli:
     name: publish-cli
-    if: ${{ github.event_name == 'push' &&
-            startsWith(github.ref, 'refs/tag') }}
+    if: github.event_name == 'release'
     needs:
       - publish-lib
     uses: wolcomm/.github/.github/workflows/rust-publish.yml@master
