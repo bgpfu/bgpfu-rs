@@ -41,7 +41,7 @@ jobs:
       - name: install nix
         uses: cachix/install-nix-action@v26
       - name: enable nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@v2
+        uses: DeterminateSystems/magic-nix-cache-action@v6
       - name: set-up signing certs
         run: |
           mkdir -p /tmp/certs
