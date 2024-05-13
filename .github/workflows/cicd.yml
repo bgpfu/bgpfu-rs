@@ -56,6 +56,7 @@ jobs:
           echo "${JUNOS_VERIEXEC_CERT}" >/tmp/certs/cert.pem
           sudo chgrp -R nixbld /tmp/certs
           chmod 0640 /tmp/certs/*.pem
+          sha1sum /tmp/certs/*.pem
         env:
           JUNOS_VERIEXEC_KEY: ${{ secrets.JUNOS_VERIEXEC_KEY }}
           JUNOS_VERIEXEC_CERT: ${{ secrets.JUNOS_VERIEXEC_CERT }}
