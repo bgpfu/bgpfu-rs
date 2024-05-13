@@ -52,8 +52,8 @@ jobs:
         run: |
           mkdir -p /tmp/certs
           chmod 0750 /tmp/certs
-          echo -n "${JUNOS_VERIEXEC_KEY}" >/tmp/certs/key.pem
-          echo -n "${JUNOS_VERIEXEC_CERT}" >/tmp/certs/cert.pem
+          echo "${JUNOS_VERIEXEC_KEY}" >/tmp/certs/key.pem
+          echo "${JUNOS_VERIEXEC_CERT}" >/tmp/certs/cert.pem
           sudo chgrp -R nixbld /tmp/certs
           chmod 0640 /tmp/certs/*.pem
         env:
