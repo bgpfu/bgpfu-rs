@@ -3,7 +3,7 @@ members = ["lib", "cli", "junos-agent", "netconf"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0-rc.2"
+version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
 authors = ["Ben Maddison <benm@workonline.africa>"]
@@ -16,8 +16,8 @@ categories = ["network-programming", "database"]
 
 [workspace.dependencies]
 # internal
-bgpfu-lib = { path = "./lib", version = "0.1.0-alpha.2" }
-bgpfu-netconf = { path = "./netconf", version = "0.1.0-alpha.2", default-features = false }
+bgpfu-lib = { path = "./lib", version = "0.1.0" }
+bgpfu-netconf = { path = "./netconf", version = "0.1.0", default-features = false }
 # external
 anyhow = "^1.0"
 async-trait = "^0.1"
