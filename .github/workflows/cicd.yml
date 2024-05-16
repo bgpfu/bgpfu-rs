@@ -45,7 +45,7 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
       - name: install nix
-        uses: cachix/install-nix-action@v26
+        uses: cachix/install-nix-action@V27
       - name: enable nix cache
         uses: DeterminateSystems/magic-nix-cache-action@v6
       - name: set-up signing certs
