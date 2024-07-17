@@ -39,7 +39,7 @@ russh-keys = "^0.38"
 rustls-pemfile = "^2.0"
 rustls-pki-types = "^1.0"
 thiserror = "^1.0"
-tokio = { version = "^1.0", default-features = false }
+tokio = { version = "^1.38", default-features = false }
 tokio-rustls = "^0.25"
 tracing = { version = "^0.1", features = ["log"] }
 tracing-appender = "^0.2.3"
