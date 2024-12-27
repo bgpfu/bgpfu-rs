@@ -85,7 +85,8 @@ impl RpslEvaluator {
 }
 
 impl<'a> Evaluator<'a> for RpslEvaluator {
-    type Output<T> = <T as Evaluate<'a, Self>>::Output
+    type Output<T>
+        = <T as Evaluate<'a, Self>>::Output
     where
         T: Evaluate<'a, Self>;
 

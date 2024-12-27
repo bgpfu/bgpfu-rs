@@ -1,0 +1,41 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "bgpfu"
+version = "0.4.0"
+description = "BGP tools for fun and profit."
+authors = [{ name = "Ben Maddison", email = "benm@workonline.africa" }]
+requires-python = ">=3.8"
+keywords = [
+  "bgp", "irr", "internet"
+]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Software Development :: Quality Assurance",
+  "Topic :: Software Development :: Testing",
+  "Topic :: Software Development :: Libraries",
+]
+readme = "README.md"
+
+[project.urls]
+Repository = "https://github.com/bgpfu/bgpfu"
+Changelog = "https://github.com/bgpfu/bgpfu/blob/main/CHANGELOG.md"
+
+[tool.maturin]
+module-name = "bgpfu"
+manifest-path = "cli/Cargo.toml"
+
