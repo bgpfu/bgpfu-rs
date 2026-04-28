@@ -64,7 +64,7 @@
             junos-agent = rust.buildPackage {
               pname = "bgpfu-junos-agent";
               defaultPlatform = x86_64-junos-freebsd;
-              extraPlatforms = [ native ];
+              extraPlatforms = [ x86_64-junos-evo native ];
             };
             default = cli;
           };

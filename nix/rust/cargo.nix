@@ -143,9 +143,9 @@ let
           packageName = pname;
           extraExtraArgs = "--bin ${bin}";
           withDependencies = true;
-        } // { inherit meta pname; };
+        } // { inherit meta pname bin; };
       passthru.platforms = listToAttrs (map
-        ({ platformName, mkPackage }:
+        ({ platformName, mkPackage, ... }:
           nameValuePair platformName (mkPackage craneLib.buildPackage baseArgs))
         extraPlatforms);
     in

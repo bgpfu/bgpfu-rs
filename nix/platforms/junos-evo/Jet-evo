@@ -1,0 +1,581 @@
+#!/usr/bin/env python3
+#
+# Copyright (c) 2022, Juniper Networks, Inc.
+# All rights reserved.
+
+"""
+This program is to be used by developers and 3rd party to create packages
+that can be added to a junos-linux chassis running and evo stack.
+
+We create a squashfs and a companion bom file.
+Both can be signed with IMA or not. Both must be signed in order for IMA to be used.
+Installation will add them to a new directory in /soft/current/addons
+
+Unsigned addons will not mount in a IMA enabled run-time.
+
+"""
+import argparse
+import base64
+import subprocess
+import sys
+import hashlib
+import os
+import json
+import sys
+import logging
+from logging.handlers import RotatingFileHandler
+
+
+version_minor=0
+version_major=1
+description="Junos-EVO external app packager, version %d.%d" % (version_major, version_minor)
+
+# supported architecture if --arch or environment PKG_VARIANT not defined.
+defaultArch="Yocto_2.2_x86_64"
+# supported node names if --node or environment PKG_NODES not defined.
+defaultNode="re"
+separators=':'
+
+# run a single shell command and show any errors and exit
+def command(s, fail=True):
+    sub=subprocess.Popen(s, bufsize=0, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE);
+    (out, err) = sub.communicate()
+    ret=sub.wait()
+    if ret != 0:
+        logger.error("Command failed with error %s" % ret)
+        logger.error("cmd='%s'" % s)
+        logger.error("Stdout:\n%s" % out)
+        logger.error("Outerr:\n%s" % err)
+        if fail: sys.exit(1)
+    return out
+    
+dircache=set()
+# recurse creating directories leading to a file/dir
+def buildDirs(pfd, dname, entry):
+    if dname in dircache: return
+    if len(dname) < 2: return
+    if dname == '//': return
+    buildDirs(pfd, os.path.dirname(dname), entry)
+    pfd.write("/%s d %s %s %s\n" % (dname, entry['mode'], entry['owner'], entry['group']))
+    dircache.add(dname)
+
+def addToPfile(path, root, entry, sb):
+    pfd=open("p_file", "a",encoding="utf-8")
+    t=entry['type']
+    # figure out the source path
+    # published files begin with absolute path
+    # local SB files begin with .. and relative to 
+    spath=entry['parents'][0]
+    if spath[0] == ".":
+        spath=spath.split("/")[0:-2]
+        start=0
+        while spath[start] == "..": start=start+1
+        spath=sb+"/"+"/".join(spath[start:])+"/install"
+    else:
+        spath="/".join(spath.split("/")[0:-2])+"/install"
+    src="%s/%s" % (spath, path)
+    if not os.path.islink(src) and not os.path.exists(src):
+        print(("*** warning - Path does not exists '%s'" % src))
+    buildDirs(pfd, os.path.dirname(path), entry)
+    if t == "file":
+        pfd.write("/%s f %s %s %s exec cat %s\n" % (path, entry['mode'], entry['owner'], entry['group'], src))
+    elif t == "dir" :
+        pfd.write("/%s d %s %s %s\n" % (path, entry['mode'], entry['owner'], entry['group']))
+    elif t == "link" :
+        pfd.write("/%s s %s %s %s %s\n" % (path, entry['mode'], entry['owner'], entry['group'], entry['dest']))
+    else :
+        print(("Unknown type %s" % t))
+    pfd.close()
+
+def mkPfile(elist, root, args):
+    # for each file in the manifest check if it's present under the installation root
+    # and if not, create a mksquashfs pseudofile line for it.
+    # A SB pkg-manifest will have already resolved path in the "parents" array.
+    # A typical entry for a published component file is :
+    """ 
+    "usr/bin/ttpdump": {
+        "component": "ttpdump", 
+        "dest": "", 
+        "group": "root", 
+        "mode": "0755", 
+        "owner": "root", 
+        "parents": [
+            "/volume/evo/files/publish/netstack/utils/v/master/0.0.29.101/ttpdump/obj-re-64b/install-dev/pkg-manifest.json", 
+            "../../../../../../packages/common-chassis/meta-re64/obj-re-64b/install-dev/pkg-manifest.json"
+        ], 
+        "sha1": "3599666258d9a49864a93446f77e92d3c1fc4d84", 
+        "source": "${__component_path_ttpdump}/obj-re-64b/install/usr/bin/ttpdump", 
+        "type": "file"
+    },
+    """
+    #
+    # a typical entry for a SB local component file is :
+    """
+    "usr/bin/uswitchd": {
+        "component": "uswitchd", 
+        "dest": "", 
+        "group": "root", 
+        "mode": "0755", 
+        "owner": "root", 
+        "parents": [
+            "../../../../../uswitch/uswitchd/obj-re-64b/install-dev/pkg-manifest.json", 
+            "../../../../../../packages/common-chassis/meta-re64/obj-re-64b/install-dev/pkg-manifest.json"
+        ], 
+        "sha1": "1f1e4c24ccee7ea8440e8aee67c0d9eb795fe68f", 
+        "source": "${__component_path_uswitchd}/obj-re-64b/install/usr/bin/uswitchd", 
+        "type": "file"
+    }, 
+    """
+    sb=os.getenv("SB")
+    for fname in elist:
+        path="%s/%s" % (root,fname)
+        if args.nodebug and ".debug" in fname.split('/'):
+            continue
+        if not args.jsu and not os.path.exists(path):
+            if "parents" in elist[fname]:
+                if not sb:
+                    print("SB environment variable not found!?")
+                    sys.exit(1)
+                # check if we have a local copy
+                elist[fname]['owner']="0"
+                elist[fname]['group']="0"
+                addToPfile(fname, root, elist[fname], sb)
+            else:
+                print(("path has no parents '%s' and is not under component" % fname))
+  
+# Extract list of files scanning a directory struture
+def makeManifest(path, elist, args):
+    # if we are called in the context of evo-to-re. Use the EVO manifest directly
+    if os.path.exists("%s/../install-dev/pkg-manifest.json" % path):
+        elist.update(json.load(open("%s/../install-dev/pkg-manifest.json" % path, "r")))
+        mkPfile(elist, path, args);
+    else:
+        # evo-to-re will merge the manifest into the root
+        if os.path.exists("%s/manifest" % path):
+            elist.update(json.load(open("%s/manifest" % path, "r")))
+            mkPfile(elist, path, args)
+        else:
+            # construct directly from find(1) output
+            list=command("find %s -printf '%%p,%%y,0%%m,0,0,%%l\n'" % path).decode('utf-8');
+            for line in list.split("\n"):
+                fields=line.split(",");
+                if not len(fields[0]): continue
+                relname=fields[0][len(path):]
+                sha1="unknown"
+                if len(relname):
+                    source=""
+                    if fields[1]=='d':
+                        type="dir"
+                    elif fields[1]=='f':
+                        type="file"
+                        sha1=getSha1("%s/%s" % (path,fields[0]), blksize=8192)
+                    elif fields[1]=='l':
+                        source=os.readlink(fields[0]);
+                        type="link"
+                    else:
+                        logger.error("Invalid file type '%s' line '%s'" % (fields[1], line))
+                        sys.exit(1)
+                    if relname in elist:
+                        logger.warning("Warning : duplicate '%s' found in root '%s'" % (relname, path))
+                    elist[relname]={'type':type,'mode':fields[2],'owner':'root','group':'root','target':fields[5],'source':source,'sha1': sha1}
+    return
+
+def filesToBom(fd, elist, component, version, sroot, set_perms=None, bin_list=None):
+    if not version.startswith('v/'):
+        version = "v/master/"+version
+
+    for path in sorted(elist):
+        extra=""
+        if set_perms:
+            for key in set_perms:
+                if key.startswith('/') or path.startswith('/'):
+                    path_check = path.strip('/')
+                    key_check = key.strip('/')
+                    if key_check and path_check and key_check == path_check:
+                            elist[path]['mode'] = set_perms[key]
+                elif key == path:
+                    elist[path]['mode'] = set_perms[key]
+        if bin_list and len(bin_list)>0:
+            for bi in bin_list:
+                # Somehow the unicode 'u' is becoming part of string. Ignoring 'u' and leading '/' to compare with path
+                if bi.startswith('/'):
+                    p = bi[1:]
+                else:
+                    p = bi[2:]
+                if elist[path]['type'] == 'link':
+                    extra='source="%s"' % elist[path]['source']
+                if p==path:
+                    if 'sha1' not in elist[path]:
+                        # sroot might have a leading whitespace which will fail open call.
+                        # Using split to remove the whitespace
+                        sha1=getSha1("%s/%s" % (sroot.split()[0], path), blksize=8192)
+                        elist[path]['sha1'] = sha1
+                    if elist[path]['type'] == 'file':
+                        fd.write('                <element target="/%s" type="%s" perms="%s" owner="%s" group="%s" sha1="%s" component="%s" version="%s" %s/>\n' % (
+                        path,
+                        elist[path]['type'],
+                        elist[path]['mode'],
+                        elist[path]['owner'],
+                        elist[path]['group'],
+                        elist[path]['sha1'],
+                        component,
+                        version,
+                        extra
+                        ))
+                    elif elist[path]['type'] == 'dir' or elist[path]['type'] == 'link':
+                        fd.write('                <element target="/%s" type="%s" perms="%s" owner="%s" group="%s" component="%s" version="%s" %s/>\n' % (
+                            path,
+                            elist[path]['type'],
+                            elist[path]['mode'],
+                            elist[path]['owner'],
+                            elist[path]['group'],
+                            component,
+                            version,
+                            extra
+                        ))
+        else:
+            if elist[path]['type'] == 'link':
+                extra='source="%s"' % elist[path]['source']
+            if elist[path]['type'] == 'file':
+                if 'sha1' not in elist[path]:
+                    # sroot might have a leading whitespace which will fail open call.
+                    # Using split to remove the whitespace
+                    sha1=getSha1("%s/%s" % (sroot.split()[0],path), blksize=8192)
+                    elist[path]['sha1'] = sha1
+                fd.write('                <element target="/%s" type="%s" perms="%s" owner="%s" group="%s" sha1="%s" component="%s" version="%s" %s/>\n' % (
+                    path,
+                    elist[path]['type'],
+                    elist[path]['mode'],
+                    elist[path]['owner'],
+                    elist[path]['group'],
+                    elist[path]['sha1'],
+                    component,
+                    version,
+                    extra
+                ))
+            elif elist[path]['type'] == 'dir' or elist[path]['type'] == 'link':
+                fd.write('                <element target="/%s" type="%s" perms="%s" owner="%s" group="%s" component="%s" version="%s" %s/>\n' % (
+                    path,
+                    elist[path]['type'],
+                    elist[path]['mode'],
+                    elist[path]['owner'],
+                    elist[path]['group'],
+                    component,
+                    version,
+                    extra
+                ))
+
+def getSha1(fname, blksize=8192):
+    logger.debug("Filename is '%s'" % fname)
+    try :
+        file=open(fname, 'rb')
+    except:
+        return None
+    sha1=hashlib.sha1()
+    s=file.read(blksize)
+    while len(s) > 0:
+        sha1.update(s)
+        s=file.read(blksize)
+    return sha1.hexdigest()
+
+def genIMASignature(fname, key):
+    logger.debug("Generating Detached IMA signature for '%s' with PATH '%s'" % (fname, os.getenv("PATH")))
+
+    cmd = "evmctl ima_sign -n -f -k %s %s > /dev/null" % (key, fname)
+    command(cmd, fail=False)
+
+    signame = "%s.sig" % fname
+    with open(signame, "rb") as f:
+        sig = f.read()
+    os.unlink(signame)
+
+    sig_b64 = base64.b64encode(sig)
+    sig_xattr = "# file: %s\nsecurity.ima=0s%s" % (os.path.basename(fname), sig_b64.decode('utf-8'))
+    with open("%s.ima" % fname, "wb") as f:
+        f.write(sig_xattr.encode('utf-8'));
+
+# ==================================================================================
+if __name__ == "__main__":
+
+    # Processs arguements
+    parser = argparse.ArgumentParser(description=description+"""
+The command will create a single squashfs filesystem file and a companion bom.
+The name of the 2 files will be $name_$version.bom and $name_$version.fs
+Where $name is the value of the --name parameter and $version is the value of
+the --version argument.
+    """)
+
+    optional = parser._action_groups.pop()
+    required = parser.add_argument_group('required arguments')
+    parser._action_groups.append(optional)
+
+    required.add_argument('-n', '--name', action='store', required = True,
+                        help='Name of the this component')
+    required.add_argument('-r', '--root', required = True, action='store',
+                        help='Top of file root(s). Comma separated list.')
+
+    #Hidden argument:  "Rank on the software stack and up/postinstall execution (90-99)"
+    parser.add_argument('-R', '--rank', action='store',
+                        help='Package rank in the range 0-99. Higher ranked packages will override lower ranked packages in case of conflicts. Default rank is 99.')
+    required.add_argument('-v', '--version', action='store',
+                        help='Version of this component')
+    parser.add_argument('-a', '--arch', action='store',
+                        help='Architecture targeted (x86_64, x86_64_fpc, x86_64:x86_64_fpc (default: x86_64))')
+    parser.add_argument('-N', '--node', action='store',
+                        help='Node targeted (re, fpc_x86_64, re:fpc_x86_64)  (default: re)')
+    parser.add_argument('-i', '--preinstall', action='store',
+                        help='File name holding preinstall life-cycle event script')
+    parser.add_argument('-p', '--postinstall', action='store',
+                        help='File name holding postinstall life-cycle event script')
+    parser.add_argument('-u', '--preuninstall', action='store',
+                        help='File name holding the preuninstall life-cycle event script' )
+
+    #File name holding application policy
+    parser.add_argument('-y', '--policy_yaml', action='store',
+                        help=argparse.SUPPRESS)
+    parser.add_argument('-d', '--directory', action='store',
+                        help='Top of file root(s). Comma separated list.')
+
+    #JSU case - no SB lookups using parents[0] element of manifest
+    parser.add_argument('-j', '--jsu', action='store_true',
+                        help=argparse.SUPPRESS)
+    parser.add_argument('-x', '--nodebug', action='store_true',
+                        help='Strip all debug files.')
+    parser.add_argument('-t', '--tar', action='store_true',
+                        help='Create tar file with all the contents')
+    parser.add_argument('-l', '--logfile', action='store', default='junos-evo-packager.log',
+                        help='Packager logging file name with absolute path. (Default: junos-evo-packager.log)')
+    parser.add_argument('-k', '--key', action='store', default=None,
+                        help='Private key used for signing the package')
+
+    #Hidden argument: List for binaries. Applicable for sandbox builds
+    parser.add_argument('-b', '--binaries', action='store', type=str, nargs='+',
+                        help=argparse.SUPPRESS)
+    parser.add_argument('-f', '--files', action='store',
+                        help=argparse.SUPPRESS)
+    parser.add_argument('-V', '--variant', action='store', help=argparse.SUPPRESS)
+
+    args = parser.parse_args()
+
+    logfile=args.logfile
+
+    log_formatter=logging.Formatter('%(message)s')
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+
+    # create logging handlers
+    to_console = logging.StreamHandler(sys.stdout)
+    to_file = RotatingFileHandler(logfile, maxBytes=5000000, backupCount=3)
+
+    to_console.setLevel(logging.INFO)
+    to_console.setFormatter(log_formatter)
+
+    to_file.setLevel(logging.DEBUG)
+    to_file.setFormatter(log_formatter)
+
+    logger.addHandler(to_console)
+    logger.addHandler(to_file)
+
+    logger.info(description)
+
+    if not args.version or not args.name:
+        logger.error("Please specify both the name and version using the --name and --version options")
+        exit(1)
+
+    if args.rank:
+        if not (int(args.rank) >= 0 and int(args.rank) < 100):
+            logger.error("*** Error : Rank value is out of normal range, 0-99")
+            exit(1)
+    else:
+        args.rank=99
+
+    distro_version=''
+    if os.getenv('OECORE_DISTRO_VERSION') is None:
+        if os.path.exists('/volume/evo/files/opt/poky/3.0.2-11/environment-setup-core2-64-poky-linux'):
+            #get distro version from here
+            distro_file = open('/volume/evo/files/opt/poky/3.0.2-11/environment-setup-core2-64-poky-linux','r')
+            for line in distro_file:
+                if 'OECORE_DISTRO_VERSION' in line:
+                    distro_version=line.split('=')[1].replace('\"','').split('\n')[0]
+            distro_file.close()
+        else:
+            logger.error("Please run packager from Junos-Linux SDK sourced environment")
+            exit(1)
+    else:
+        distro_version=os.getenv('OECORE_DISTRO_VERSION')
+
+    # root of files must be specified
+    if not args.root:
+        logger.error("Please specify the root directory for the files using --root options")
+        exit(1)
+
+    # validate preinstall file path
+    if args.preinstall and not os.path.isfile(args.preinstall):
+        logger.error("Error: Invalid path : '%s'" % (args.preinstall))
+        exit(1)
+
+    # validate postinstall file path
+    if args.postinstall and not os.path.isfile(args.postinstall):
+        logger.error("Error: Invalid path : '%s'" % (args.postinstall))
+        exit(1)
+
+    # validate preuninstall file path
+    if args.preuninstall and not os.path.isfile(args.preuninstall):
+        logger.error("Error: Invalid path : '%s'" % (args.preuninstall))
+        exit(1)
+
+    # arch(es)
+    arch_type = ['x86_64','x86_64_fpc']
+    #if variant is passed then it will become the default architecture.
+    if args.variant:
+        archs = args.variant
+    elif args.arch :
+        if args.arch not in arch_type :
+            logger.error("Error: Invalid Architecture : '%s'" % (args.arch))
+            logger.error("Supported Architectures: x86_64, x86_64_fpc")
+            exit(1)
+        else :
+            archs = "Yocto_2.2_" + args.arch
+    elif "PKG_VARIANT" in os.environ:
+        archs=os.environ["PKG_VARIANT"]
+    else:
+        archs=defaultArch
+    arches=archs.split(separators)
+
+    # node(s)
+    if args.node :
+        nodes=args.node.split(separators)
+    else:
+        if "PKG_NODES" in os.environ:
+            nodes=os.environ["PKG_NODES"]
+        else:
+            nodes=[ defaultNode ]
+    if not args.directory:
+        args.directory="."
+
+    command("mkdir -p %s" % args.directory)
+
+    # mksquashfs pseudo file can be created from a EVO component root
+    # so clean any existing 
+    os.system("rm -f p_file");
+
+    # construct each file tree from the roots
+    roots=args.root.split(', :')
+    elist={}
+    for root in roots:
+        makeManifest(root, elist, args)
+
+    # read in the preinstall or create an empty one
+    preinstall_cmd=""
+    if args.preinstall: preinstall_cmd+=open(args.preinstall).read();
+
+    # read in the postinstall or create an empty one
+    postinstall_cmd=""
+    if args.postinstall: postinstall_cmd+=open(args.postinstall).read();
+
+    # read in the preuninstall or create an empty one
+    preuninstall_cmd=""
+    if args.preuninstall: preuninstall_cmd+=open(args.preuninstall).read();
+
+    # let's create the squashfs
+    sroot=""
+    for r in roots:
+        sroot=sroot+" "+r
+
+    # replace '/' in component names with '_'
+    args.name=args.name.replace("/","_")
+
+    # reading json data to a dictionary
+    set_perms=None
+    if args.files:
+        try:
+            with open(args.files, 'r') as read_obj:
+                set_perms = json.load(read_obj)
+        except Exception as e:
+            print(("Error:", e))
+            sys.exit(1)
+        for keyv in set_perms:
+            key = str(keyv)
+            perm = int(set_perms[keyv])
+            del set_perms[keyv]
+            set_perms[key] = perm
+        # writing data to the Pfile
+        with open('p_file', 'a',encoding="utf-8") as file_data:
+            for key in set_perms:
+                file_data.write('%s m %d 0 0\n' % (key, set_perms[key]))
+    # file name
+    justname="%s_%s" % (args.name, arches[0])
+    fname="%s/%s" % (args.directory, justname)
+    # Skip manifest file to be packaged as part of the squashfs
+    if os.path.exists('p_file'):
+        s="mksquashfs%s %s.fs -b 8192 -pf p_file -force-uid 0 -force-gid 0 -e manifest" % ( sroot, fname);
+    else:
+        s="mksquashfs%s %s.fs -b 8192 -force-uid 0 -force-gid 0 -e manifest" % ( sroot, fname);
+    logger.info("Creating squashfs with combine root(s) - '%s'" % sroot)
+    command(s)
+    sha1=getSha1("%s.fs" % fname)
+    # create the BOM
+    fd=open("%s.bom" % fname, "w",encoding="utf-8")
+    # header
+    fd.write('<?xml version="1.0" ?>\n<bom version="1.0">\n    <module name="%s" version="%s" required="0" level="%s" bootable="0">\n' % (args.name, args.version, args.rank))
+    for i in range(0,len(nodes)):
+        fd.write('        <amf name="%s" variant="%s"/>\n' % (nodes[i], arches[i]))
+    # still put the default vairant for backward compatibility
+    fd.write('            <variant name="%s" digest="%s">\n' % (arches[0], sha1))
+    # add the files to the bom
+    bin_list=None
+    if args.binaries:
+        bin_list=args.binaries
+    filesToBom(fd, elist, args.name, args.version, sroot, set_perms, bin_list=bin_list)
+    fd.write('             </variant>\n');
+    # footer
+    fd.write("    </module>\n</bom>\n")
+
+    # create a bourne shell version of this information
+    # just a tiny subset of the information
+    fd=open("%s.sh" % fname, "w",encoding="utf-8")
+    fd.write('name="%s"\n' % args.name)
+    fd.write('ver="%s"\n' % args.version)
+    fd.write('sha1="%s"\n' % sha1)
+    fd.write('rank="%s"\n' % args.rank)
+    fd.write("nodes=(")
+    for node in nodes:
+        fd.write('%s ' % node)
+    fd.write(")\n")
+    fd.write('variant="%s"\n' % arches[0])
+    fd.write('distro_version="%s"\n' % distro_version)
+    fd.close()
+
+    # life-cycle hooks
+    open(fname+".preinstall", "w",encoding="utf-8").write(preinstall_cmd)
+    os.chmod(fname+".preinstall", 0o755)
+    open(fname+".postinstall", "w",encoding="utf-8").write(postinstall_cmd)
+    os.chmod(fname+".postinstall", 0o755)
+    open(fname+".preuninstall", "w",encoding="utf-8").write(preuninstall_cmd)
+    os.chmod(fname+".preuninstall", 0o755)
+
+    # check is a signer is defiend and use it for IMA
+    if "IMA_SIGN" in os.environ:
+        logger.info("Signing files...")
+        for ext in [ "fs", "bom", "sh", "preinstall", "postinstall", "preuninstall" ]:
+            command("cd %s && echo %s.%s | %s > %s.%s.ima" % (args.directory, justname, ext, os.environ["IMA_SIGN"], justname, ext)) and sys.exit(1)
+    else:
+        # if a signer is not defined, then use locally available
+        # signing infrastructure
+        if not args.key:
+            logger.error("Error: 'key' is missing, pass a private key for signing. Exiting...")
+            sys.exit(1)
+        else:
+            logger.info("Generating Signature...")
+            for ext in ["fs", "bom", "sh", "preinstall", "postinstall", "preuninstall"]:
+                filename = "%s.%s" % (fname, ext)
+                genIMASignature(filename, args.key)
+                logger.info("IMA signature success for file:%s" % (filename))
+
+    if args.tar :
+    # create tgz file
+        tar_name="%s.%s.tgz" % (args.name, args.version)
+        tar_cmd="cd %s; tar -czf %s %s_*; rm -rf %s_*; cd -" % (args.directory, tar_name, args.name, args.name)
+        logger.info("Package copied at : %s/%s" % (args.directory, tar_name))
+        command(tar_cmd)
+        sys.exit(0)
