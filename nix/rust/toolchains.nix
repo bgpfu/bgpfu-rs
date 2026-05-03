@@ -27,6 +27,7 @@ let
       rustfmt
       llvm-tools
       rust-analyzer
+      rust-src
     ] ++ crossComponents manifest;
 
 in
