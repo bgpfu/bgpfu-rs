@@ -68,5 +68,10 @@
             };
             default = cli;
           };
+
+          devShells = rec {
+            inherit (rust.devShells) msrv stable nightly;
+            default = stable;
+          };
         });
 }

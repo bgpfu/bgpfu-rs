@@ -9,6 +9,17 @@ let
 
   src = with baseLib; cleanCargoSource (path ./../..);
 
+  devShells = mapAttrs
+    (toolchainName: toolchain:
+    let
+      craneLib = mkLib toolchain;
+    in
+      craneLib.devShell {
+        inherit checks;
+      }
+    )
+    toolchains;
+
   commonArgs = {
     inherit src;
     pname = "bgpfu";
@@ -152,5 +163,5 @@ let
     defaultPlatform.mkPackage craneLib.buildPackage (baseArgs // { inherit passthru; });
 in
 {
-  inherit buildBinWith checks;
+  inherit buildBinWith checks devShells;
 }

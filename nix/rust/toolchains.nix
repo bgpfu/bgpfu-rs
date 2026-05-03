@@ -26,6 +26,7 @@ let
       clippy
       rustfmt
       llvm-tools
+      rust-analyzer
     ] ++ crossComponents manifest;
 
 in

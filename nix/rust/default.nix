@@ -1,9 +1,5 @@
 { pkgs, crane, fenix, platforms, nightly-manifest, stable-manifest, msrv-manifest, advisory-db }:
 let
-  inherit (pkgs) system lib;
-  inherit (builtins) removeAttrs readFile listToAttrs map;
-  inherit (lib) mapAttrsToList nameValuePair;
-
   toolchainManifests = {
     nightly = nightly-manifest;
     stable = stable-manifest;
@@ -19,12 +15,12 @@ let
     src = ./../..;
   };
 
-  buildPackage = cargo.buildBinWith rec {
+  buildPackage = cargo.buildBinWith {
     inherit platforms;
     toolchainName = "stable";
   };
 in
 {
-  inherit (cargo) checks;
+  inherit (cargo) checks devShells;
   inherit buildPackage;
 }
