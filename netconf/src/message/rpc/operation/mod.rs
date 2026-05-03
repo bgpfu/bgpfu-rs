@@ -203,7 +203,7 @@ impl WriteXml for Source {
                     })?;
             }
             Self::Url(url) => url.write_xml(writer)?,
-        };
+        }
         Ok(())
     }
 }

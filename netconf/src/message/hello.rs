@@ -56,15 +56,13 @@ impl ReadXml for ServerHello {
                     session_id = Some(span.parse()?);
                     tracing::debug!(?session_id);
                 }
-                (_, Event::Comment(_)) => {
-                    continue;
-                }
+                (_, Event::Comment(_)) => (),
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
                     return Err(ReadError::UnexpectedXmlEvent(event.into_owned()));
                 }
-            };
+            }
         }
         Ok(Self {
             capabilities: capabilities

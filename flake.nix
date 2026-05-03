@@ -25,7 +25,7 @@
       flake = false;
     };
     msrv-manifest = {
-      url = "https://static.rust-lang.org/dist/channel-rust-1.75.toml";
+      url = "https://static.rust-lang.org/dist/channel-rust-1.87.toml";
       flake = false;
     };
     advisory-db = {

@@ -52,7 +52,7 @@ where
                     .write_inner_content(|writer| self.source.write_xml(writer))?;
                 if let Some(ref filter) = self.filter {
                     filter.write_xml(writer)?;
-                };
+                }
                 Ok(())
             })
             .map(|_| ())

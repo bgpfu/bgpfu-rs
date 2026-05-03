@@ -18,7 +18,7 @@ pub(crate) use self::operation::Operation;
 pub struct MessageId(usize);
 
 impl MessageId {
-    pub(crate) fn increment(&mut self) -> Self {
+    pub(crate) const fn increment(&mut self) -> Self {
         self.0 += 1;
         *self
     }
@@ -115,7 +115,7 @@ impl ReadXml for PartialReply {
                         .transpose()?;
                     _ = reader.read_to_end(end.name());
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::Eof) => break,
                 (_, Event::Text(txt)) if &*txt == MARKER => break,
                 (ns, event) => {
@@ -172,7 +172,7 @@ impl<O: Operation> TryFrom<PartialReply> for Reply<O> {
                 value.message_id,
                 this.message_id,
             ));
-        };
+        }
         Ok(this)
     }
 }
@@ -214,7 +214,7 @@ impl ReadXml for EmptyReply {
                     tracing::debug!(?tag);
                     errors.push(Error::read_xml(reader, &tag)?);
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
@@ -222,7 +222,7 @@ impl ReadXml for EmptyReply {
                 }
             }
         }
-        this.or_else(|| (!errors.is_empty()).then(|| Self::Errs(errors)))
+        this.or_else(|| (!errors.is_empty()).then_some(Self::Errs(errors)))
             .ok_or_else(|| ReadError::missing_element("rpc-reply", "ok/rpc-error"))
     }
 }
@@ -269,7 +269,7 @@ impl<D: ReadXml> ReadXml for DataReply<D> {
                     tracing::debug!(?tag);
                     errors.push(Error::read_xml(reader, &tag)?);
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
@@ -433,7 +433,7 @@ mod tests {
                                 .map_err(|err| ReadError::Other(err.into()))?,
                         );
                     }
-                    (_, Event::Comment(_)) => continue,
+                    (_, Event::Comment(_)) => (),
                     (_, Event::End(tag)) if tag == end => break,
                     (ns, event) => {
                         tracing::error!(?event, ?ns, "unexpected xml event");

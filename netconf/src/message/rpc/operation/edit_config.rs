@@ -45,17 +45,17 @@ where
                     _ = writer
                         .create_element("default-operation")
                         .write_text_content(BytesText::new(self.default_operation.as_str()))?;
-                };
+                }
                 if self.error_option.is_non_default() {
                     _ = writer
                         .create_element("error-option")
                         .write_text_content(BytesText::new(self.error_option.as_str()))?;
-                };
+                }
                 if self.test_option.is_non_default() {
                     _ = writer
                         .create_element("test-option")
                         .write_text_content(BytesText::new(self.test_option.as_str()))?;
-                };
+                }
                 self.source.write_xml(writer)?;
                 Ok(())
             })

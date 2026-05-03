@@ -305,14 +305,14 @@ impl Display for Requirements {
                 let mut iter = requirements.iter();
                 if let Some(first) = iter.next() {
                     write!(f, "any of '{first}'")?;
-                };
+                }
                 iter.try_for_each(|requirement| write!(f, ", '{requirement}'"))
             }
             Self::All(requirements) => {
                 let mut iter = requirements.iter();
                 if let Some(first) = iter.next() {
                     write!(f, "all of '{first}'")?;
-                };
+                }
                 iter.try_for_each(|requirement| write!(f, ", '{requirement}'"))
             }
         }

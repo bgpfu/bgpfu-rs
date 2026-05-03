@@ -124,7 +124,7 @@ impl<A: Afi> Ranges<A> {
         self.inner.iter()
     }
 
-    fn diff<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = &PrefixRange<A>> {
+    fn diff<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = &'a PrefixRange<A>> {
         self.inner.difference(&other.inner)
     }
 }

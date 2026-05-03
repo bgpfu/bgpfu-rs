@@ -45,7 +45,7 @@ impl Ssh {
                 .await?
             {
                 return Err(Error::Authentication { username });
-            };
+            }
             tracing::info!("ssh authentication sucessful");
             session
         };
@@ -75,7 +75,7 @@ impl Ssh {
                             channel.data(data.as_ref()).await?;
                         } else {
                             break;
-                        };
+                        }
                         tracing::trace!("message sent");
                     }
                     msg = channel.wait() => {
@@ -93,7 +93,7 @@ impl Ssh {
                                         let message = in_buf.split_to(end).freeze();
                                         in_queue_tx.send(message).await?;
                                         tracing::debug!("message data enqueued sucessfully");
-                                    };
+                                    }
                                 }
                                 ChannelMsg::Eof => {
                                     tracing::info!("got eof, hanging up");

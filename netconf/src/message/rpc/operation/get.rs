@@ -26,7 +26,7 @@ impl WriteXml for Get {
             .write_inner_content(|writer| {
                 if let Some(ref filter) = self.filter {
                     filter.write_xml(writer)?;
-                };
+                }
                 Ok(())
             })
             .map(|_| ())

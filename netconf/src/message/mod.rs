@@ -75,7 +75,7 @@ pub trait ServerMsg: ReadXml {
                 {
                     this = Some(Self::read_xml(&mut reader, &tag)?);
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::Eof) => break,
                 (_, Event::Text(txt)) if &*txt == MARKER => break,
                 // TODO:

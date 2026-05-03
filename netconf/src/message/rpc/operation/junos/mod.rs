@@ -106,7 +106,7 @@ impl ReadXml for BareReply {
                     tracing::debug!(?tag);
                     errors.push(Error::read_xml(reader, &tag)?);
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");

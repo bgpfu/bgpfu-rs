@@ -440,7 +440,7 @@ impl ReadXml for Reply {
                                         .map_err(|err| ReadError::Other(err.into()))?,
                                 );
                             }
-                            (_, Event::Comment(_)) => continue,
+                            (_, Event::Comment(_)) => (),
                             (_, Event::End(tag)) if tag == end => break,
                             (ns, event) => {
                                 tracing::error!(?event, ?ns, "unexpected xml event");
@@ -449,7 +449,7 @@ impl ReadXml for Reply {
                         }
                     }
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");

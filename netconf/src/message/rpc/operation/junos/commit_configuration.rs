@@ -22,6 +22,7 @@ use crate::{
 /// See [Juniper documentation][junos-docs].
 ///
 /// [junos-docs]: https://www.juniper.net/documentation/us/en/software/junos/netconf/junos-xml-protocol/topics/ref/tag/junos-xml-protocol-commit-configuration.html
+#[allow(clippy::too_long_first_doc_paragraph)]
 #[derive(Debug, Clone)]
 pub struct CommitConfiguration {
     check: bool,

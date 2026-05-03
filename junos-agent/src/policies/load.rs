@@ -121,7 +121,7 @@ impl<A: Afi> WriteXml for Differences<'_, A> {
                                     write_route_filter::<_, A>(writer, range, false)
                                 })?;
                             }
-                        };
+                        }
                         Ok::<_, WriteError>(())
                     })?;
                 _ = writer
@@ -129,7 +129,7 @@ impl<A: Afi> WriteXml for Differences<'_, A> {
                     .write_inner_content(|writer| {
                         writer.create_element("accept").write_empty().map(|_| ())
                     })?;
-            };
+            }
             Ok::<_, WriteError>(())
         })?;
         Ok(())

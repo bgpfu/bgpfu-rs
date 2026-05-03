@@ -44,7 +44,7 @@ impl Builder<'_> {
     pub fn target(mut self, target: Datastore) -> Result<Self, Error> {
         if matches!(target, Datastore::Running) {
             return Err(Error::DeleteRunningConfig);
-        };
+        }
         target.try_as_target(self.ctx).map(|target| {
             self.target.set(Target::Datastore(target));
             self

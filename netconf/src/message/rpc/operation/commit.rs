@@ -37,7 +37,7 @@ impl WriteXml for Commit {
                     _ = writer
                         .create_element("confirm-timeout")
                         .write_text_content(self.confirm_timeout.seconds())?;
-                };
+                }
                 if let Some(ref token) = self.persist {
                     _ = writer
                         .create_element("persist")

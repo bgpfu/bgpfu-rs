@@ -36,7 +36,7 @@ impl WriteXml for CancelCommit {
             })?;
         } else {
             _ = elem.write_empty()?;
-        };
+        }
         Ok(())
     }
 }

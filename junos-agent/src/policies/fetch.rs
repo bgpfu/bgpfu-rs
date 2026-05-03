@@ -92,10 +92,10 @@ where
                                                     let err = anyhow!("detected duplicate policy-statement '{name}'");
                                                     tracing::error!(%err);
                                                     return Err(ReadError::Other(err.into()));
-                                                };
+                                                }
                                             }
                                         }
-                                        (_, Event::Comment(_)) => continue,
+                                        (_, Event::Comment(_)) => (),
                                         (_, Event::End(tag)) if tag == end => break,
                                         (ns, event) => {
                                             tracing::error!(?event, ?ns, "unexpected xml event");
@@ -106,7 +106,7 @@ where
                                     }
                                 }
                             }
-                            (_, Event::Comment(_)) => continue,
+                            (_, Event::Comment(_)) => (),
                             (_, Event::End(tag)) if tag == end => break,
                             (ns, event) => {
                                 tracing::error!(?event, ?ns, "unexpected xml event");
@@ -116,7 +116,7 @@ where
                     }
                     this = Some(Self { map });
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
@@ -167,10 +167,10 @@ impl ReadXml for Maybe<Candidate> {
                         Some((raw, Err(err))) => {
                             tracing::warn!("skipping malformed filter expression '{raw}': {err}");
                         }
-                        None => continue,
+                        None => (),
                     }
                 }
-                _ => continue,
+                _ => (),
             }
         }
         let Some(filter_expr) = maybe_filter_expr else {
@@ -198,7 +198,7 @@ impl ReadXml for Maybe<Candidate> {
                             {
                                 reject_policy = true;
                             }
-                            (_, Event::Comment(_)) => continue,
+                            (_, Event::Comment(_)) => (),
                             (_, Event::End(tag)) if tag == end => break,
                             (ns, event) => {
                                 tracing::error!(?event, ?ns, "unexpected xml event");
@@ -207,7 +207,7 @@ impl ReadXml for Maybe<Candidate> {
                         }
                     }
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
@@ -277,7 +277,7 @@ impl ReadXml for Maybe<Installed> {
                             {
                                 default_reject = true;
                             }
-                            (_, Event::Comment(_)) => continue,
+                            (_, Event::Comment(_)) => (),
                             (_, Event::End(tag)) if tag == end => break,
                             (ns, event) => {
                                 tracing::error!(?event, ?ns, "unexpected xml event");
@@ -286,7 +286,7 @@ impl ReadXml for Maybe<Installed> {
                         }
                     }
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
@@ -365,7 +365,7 @@ impl<'i> BorrowedReadXml<'i> for Term<'i> {
                                 tracing::trace!(?tag);
                                 accept = true;
                             }
-                            (_, Event::Comment(_)) => continue,
+                            (_, Event::Comment(_)) => (),
                             (_, Event::End(tag)) if tag == end => break,
                             (ns, event) => {
                                 tracing::error!(?event, ?ns, "unexpected xml event");
@@ -382,7 +382,7 @@ impl<'i> BorrowedReadXml<'i> for Term<'i> {
                         });
                     }
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
@@ -433,7 +433,7 @@ impl TermFrom<'_> {
                     anyhow!("can't parse '{family}' term into {afi} prefix-ranges",).into(),
                 ))
             }
-        };
+        }
         self.route_filters
             .iter()
             .map(|route_filter| {
@@ -486,7 +486,7 @@ impl<'i> BorrowedReadXml<'i> for TermFrom<'i> {
                     let route_filter = RouteFilter::borrowed_read_xml(reader, &tag)?;
                     route_filters.push(route_filter);
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
@@ -545,7 +545,7 @@ impl<'i> BorrowedReadXml<'i> for RouteFilter<'i> {
                                 prefix_length_range = Some(reader.read_text(tag.to_end().name())?);
                                 break;
                             }
-                            (_, Event::Comment(_)) => continue,
+                            (_, Event::Comment(_)) => (),
                             (ns, event) => {
                                 tracing::error!(?event, ?ns, "unexpected xml event");
                                 return Err(ReadError::UnexpectedXmlEvent(event.into_owned()));
@@ -553,7 +553,7 @@ impl<'i> BorrowedReadXml<'i> for RouteFilter<'i> {
                         }
                     }
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");

@@ -274,7 +274,7 @@ impl<T: Transport> Session<T> {
                 request.send(&mut *self.transport_tx.lock().await).await?;
                 _ = entry.insert(OutstandingRequest::Pending);
             }
-        };
+        }
         let requests = self.requests.clone();
         let rx = self.transport_rx.clone();
         Ok(Self::recv::<O>(message_id, requests, rx))
@@ -296,20 +296,19 @@ impl<T: Transport> Session<T> {
             let mut rx_guard = rx.lock().await;
             tracing::trace!(?requests);
             tracing::debug!("checking for ready response");
-            if let Some(partial) = requests
+            let maybe_partial = requests
                 .lock()
                 .await
                 .get_mut(&message_id)
                 .ok_or(Error::RequestNotFound { message_id })?
-                .take()?
-            {
+                .take()?;
+            if let Some(partial) = maybe_partial {
                 tracing::debug!("found ready response");
                 let reply: rpc::Reply<O> = partial.try_into()?;
                 break reply.into_result();
-            };
+            }
             tracing::debug!("response to {message_id:?} not yet ready");
             let reply = rpc::PartialReply::recv(&mut *rx_guard).await?;
-            #[allow(clippy::significant_drop_in_scrutinee)]
             match requests
                 .lock()
                 .await
@@ -327,7 +326,7 @@ impl<T: Transport> Session<T> {
                     tracing::debug!("storing response to {:?}", reply.message_id());
                     _ = mem::replace(pending, OutstandingRequest::Ready(reply));
                 }
-            };
+            }
             drop(rx_guard);
         }
     }
