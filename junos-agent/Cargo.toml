@@ -33,7 +33,13 @@ tracing-log.workspace = true
 ubyte.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 bgpfu-netconf = { workspace = true, features = ["tls", "junos"] }
-tokio = { workspace = true, features = ["fs", "signal", "time", "rt-multi-thread", "macros"] }
+tokio = { workspace = true, features = [
+  "fs",
+  "signal",
+  "time",
+  "rt-multi-thread",
+  "macros",
+] }
 
 [dev-dependencies]
 version-sync.workspace = true

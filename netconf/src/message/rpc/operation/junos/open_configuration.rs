@@ -1,4 +1,7 @@
-use std::{io::Write, sync::Arc};
+use std::{
+    io::{self, Write},
+    sync::Arc,
+};
 
 use quick_xml::{events::BytesText, Writer};
 
@@ -9,7 +12,7 @@ use crate::{
             operation::{self, params::Required},
             Operation,
         },
-        WriteError, WriteXml,
+        WriteXml,
     },
     session::Context,
 };
@@ -49,7 +52,7 @@ enum Ephemeral {
 }
 
 impl WriteXml for OpenConfiguration {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         _ = writer
             .create_element(Self::NAME)
             .write_inner_content(|writer| self.target.write_xml(writer))?;
@@ -58,7 +61,7 @@ impl WriteXml for OpenConfiguration {
 }
 
 impl WriteXml for Target {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         match self {
             Self::Private => {
                 _ = writer.create_element("private").write_empty()?;
@@ -70,7 +73,7 @@ impl WriteXml for Target {
 }
 
 impl WriteXml for Ephemeral {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         _ = match self {
             Self::Default => writer.create_element("ephemeral").write_empty()?,
             Self::Named(name) => writer

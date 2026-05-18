@@ -9,23 +9,15 @@ let
 
   src = with baseLib; cleanCargoSource (path ./../..);
 
-  devShells = mapAttrs
-    (toolchainName: toolchain:
-    let
-      craneLib = mkLib toolchain;
-    in
-      craneLib.devShell {
-        inherit checks;
-      }
-    )
-    toolchains;
-
   commonArgs = {
     inherit src;
     pname = "bgpfu";
     strictDeps = true;
     doCheck = false;
   };
+
+  buildDeps = { toolchainName, packageName, featureSet } @ args:
+    toolchains.${toolchainName}.craneLib.buildDepsOnly (buildArgs args);
 
   buildArgs =
     { toolchainName
@@ -40,34 +32,16 @@ let
         if name == "default" then ""
         else "--no-default-features"
           + optionalString (length set > 0) " -F ${concatStringsSep "," set}";
-      buildDeps = { toolchainName, ... } @ args:
-        let
-          toolchain = toolchains.${toolchainName};
-          craneLib = mkLib toolchain;
-        in
-        craneLib.buildDepsOnly (buildArgs args);
-    in
-    commonArgs // {
-      pname = "${packageName}-${toolchainName}-feature-set-${name}";
-      cargoExtraArgs = "-p ${packageName} ${featureArgs} ${extraExtraArgs}";
-    } // optionalAttrs withDependencies {
       cargoArtifacts = buildDeps {
         inherit toolchainName packageName featureSet;
       };
-    };
-
-
-  mkLib = toolchain:
-    let craneLib = baseLib.overrideToolchain toolchain; in
-    craneLib // {
-      cargoMetadata = { ... } @ args: craneLib.mkCargoDerivation (args // {
-        cargoArtifacts = null;
-        pnameSuffix = "-metadata";
-        buildPhaseCargoCommand = "cargo metadata --no-deps --format-version 1 >$out";
-        doInstallCargoArtifacts = false;
-        installPhaseCommand = "";
-      });
-    };
+    in
+    commonArgs
+    // {
+      pname = "${packageName}-${toolchainName}-feature-set-${name}";
+      cargoExtraArgs = "-p ${packageName} ${featureArgs} ${extraExtraArgs}";
+    }
+    // optionalAttrs withDependencies { inherit cargoArtifacts; };
 
   featureSets = features:
     let
@@ -90,9 +64,8 @@ let
     group.overrideAttrs (_: prev: { passthru.checks = prev.passthru.entries; });
 
   checks = mapAttrs
-    (toolchainName: toolchain:
+    (toolchainName: { toolchain, craneLib }:
       let
-        craneLib = mkLib toolchain;
         metadata = importJSON (craneLib.cargoMetadata commonArgs);
         packages = map
           ({ name, features, ... }: {
@@ -100,20 +73,6 @@ let
             featureSets = featureSets (attrNames features);
           })
           metadata.packages;
-        clippy = { name, featureSets, ... }:
-          checkGroup name (map
-            (featureSet: {
-              inherit (featureSet) name;
-              path = craneLib.cargoClippy (buildArgs
-                {
-                  inherit toolchainName featureSet;
-                  packageName = name;
-                  withDependencies = true;
-                } // {
-                cargoClippyExtraArgs = "--all-targets -- --deny warnings";
-              });
-            })
-            featureSets);
       in
       checkGroup toolchainName {
         audit = craneLib.cargoAudit (commonArgs // {
@@ -121,14 +80,83 @@ let
         });
         deny = craneLib.cargoDeny commonArgs;
         fmt = craneLib.cargoFmt commonArgs;
+        taplo-fmt = craneLib.taploFmt (commonArgs // {
+          taploExtraArgs = "--diff";
+        });
         clippy = checkGroup "clippy" (map
-          (package: {
-            inherit (package) name;
-            path = clippy package;
+          ({ name, featureSets }: {
+            inherit name;
+            path = checkGroup name (map
+              (featureSet: {
+                inherit (featureSet) name;
+                path = craneLib.cargoClippy (buildArgs {
+                  inherit toolchainName featureSet;
+                  packageName = name;
+                  withDependencies = true;
+                } // {
+                  cargoClippyExtraArgs = "--all-targets -- --deny warnings";
+                });
+              })
+              featureSets);
+          })
+          packages);
+        llvm-cov = checkGroup "llvm-cov" (map
+          ({ name, featureSets }: {
+            inherit name;
+            path = checkGroup name (map
+              (featureSet: {
+                inherit (featureSet) name;
+                path = checkGroup featureSet.name (lib.mapAttrsToList
+                  (suiteName: cargoLlvmCovExtraArgs: {
+                    name = suiteName;
+                    path = craneLib.cargoLlvmCov (buildArgs {
+                      inherit toolchainName featureSet;
+                      packageName = name;
+                      withDependencies = true;
+                    } // {
+                      inherit cargoLlvmCovExtraArgs;
+                    });
+                  })
+                  {
+                    all = "--lcov --output-path $out";
+                  });
+              })
+              featureSets);
           })
           packages);
       })
     toolchains;
+
+  devShells = mapAttrs
+    (toolchainName: { craneLib, ... }:
+    let
+      checksForToolchain =
+        let
+          pred = value: value ? checks;
+          name = path: lib.concatStringsSep "_" path;
+          item = path: value: lib.nameValuePair (name path) value;
+          mapRecursive = path: value:
+            if lib.isAttrs value && pred value
+            then recurse path value
+            else [ (item path value) ];
+          recurse = path: set: lib.concatMap
+            (name: mapRecursive (path ++ [ name ]) set.checks.${name})
+            (lib.attrNames set.checks);
+        in lib.listToAttrs (recurse [ ] checks.${toolchainName});
+      # checksForToolchain = checks.${toolchainName}.checks;
+      # basicChecks = checks: lib.filterAtttrs (n: v: !(v ? checks)) checks;
+      # clippyChecks = lib.mapAttrs' (n: v: nameValuePair "clippy-${n}" v.checks.default) checksForToolchain.clippy.checks;
+      # llvmChecks = lib.mapAttrs' (n: v: nameValuePair "llvm-cov-${n}" v.checks.default) checksForToolchain.llvm-cov.checks;
+    in
+      craneLib.devShell {
+        checks = checksForToolchain;
+        # checks = clippyChecks // {
+        #   inherit (checksForToolchain) audit deny fmt taplo-fmt llvm-cov;
+        # };
+      }
+    )
+    toolchains;
+
 
   buildBinWith = { platforms, toolchainName }:
     { pname
@@ -137,8 +165,7 @@ let
     , extraPlatforms ? [ ]
     }:
     let
-      toolchain = toolchains.${toolchainName};
-      craneLib = mkLib toolchain;
+      inherit (toolchains.${toolchainName}) craneLib;
       meta =
         let
           metadata = importJSON (craneLib.cargoMetadata commonArgs);

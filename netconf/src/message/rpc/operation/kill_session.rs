@@ -1,10 +1,9 @@
-use std::io::Write;
+use std::io::{self, Write};
 
 use quick_xml::{events::BytesText, Writer};
 
 use crate::{
     capabilities::Requirements,
-    message::WriteError,
     session::{Context, SessionId},
     Error,
 };
@@ -25,7 +24,7 @@ impl Operation for KillSession {
 }
 
 impl WriteXml for KillSession {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         writer
             .create_element(Self::NAME)
             .write_inner_content(|writer| {

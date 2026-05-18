@@ -2,16 +2,13 @@
   description = "Packages and tooling for bgpfu";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     flake-utils.url = "github:numtide/flake-utils";
     fenix = {
       url = "github:nix-community/fenix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    crane = {
-      url = "github:ipetkov/crane";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    crane.url = "github:ipetkov/crane";
     jetez-src = {
       url = "github:juniper/jetez/v1.0.7";
       flake = false;
@@ -25,7 +22,7 @@
       flake = false;
     };
     msrv-manifest = {
-      url = "https://static.rust-lang.org/dist/channel-rust-1.87.toml";
+      url = "https://static.rust-lang.org/dist/channel-rust-1.91.toml";
       flake = false;
     };
     advisory-db = {
@@ -35,6 +32,32 @@
   };
 
   outputs = { self, ... } @ inputs:
+    {
+      lib.collectChecks = checks:
+        let
+          inherit (inputs.nixpkgs) lib;
+          nil = { path = []; items = []; };
+          pathToName = path: lib.concatStringsSep "-" path;
+          collect = acc: checks:
+            lib.foldl
+              ({ path, items }: { name, value }:
+              let
+                path' = path ++ [ name ];
+              in
+                if (value ? checks)
+                then collect
+                  { path = path'; inherit items; }
+                  value.checks
+                else {
+                  path = path';
+                  items = items ++ [
+                    (lib.nameValuePair (pathToName path') value)
+                  ];
+                })
+              acc
+              (lib.attrsToList checks);
+        in collect nil checks;
+    } //
     inputs.flake-utils.lib.eachDefaultSystem
       (system:
         let

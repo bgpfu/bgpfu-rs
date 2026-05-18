@@ -5,7 +5,7 @@ resolver = "2"
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.87"
+rust-version = "1.91"
 authors = ["Ben Maddison <benm@workonline.africa>"]
 description = "A toolset for working with IRR data"
 license = "MIT"
@@ -22,8 +22,8 @@ bgpfu-netconf = { path = "./netconf", version = "0.1.0", default-features = fals
 anyhow = "^1.0"
 async-trait = "^0.1"
 bytes = "^1.0"
-clap = {version = "^4.0", features = ["derive"]}
-clap-verbosity-flag = "^2.0"
+clap = { version = "^4.0", features = ["derive"] }
+clap-verbosity-flag = "^3.0"
 chrono = "^0.4"
 futures = { version = "^0.3.30", default-features = false }
 generic-ip = "^0.1.1"
@@ -31,16 +31,15 @@ iri-string = "^0.7"
 irrc = "^0.1"
 memchr = "^2.0"
 paste = "^1.0"
-quick-xml = "^0.31"
+quick-xml = "^0.40"
 rolling-file = "^0.2.0"
 rpsl = "^0.1"
-russh = "^0.39"
-russh-keys = "^0.38"
+russh = "^0.60"
 rustls-pemfile = "^2.0"
 rustls-pki-types = "^1.0"
-thiserror = "^1.0"
+thiserror = "^2.0"
 tokio = { version = "^1.0", default-features = false }
-tokio-rustls = "^0.25"
+tokio-rustls = "^0.26"
 tracing = { version = "^0.1", features = ["log"] }
 tracing-appender = "^0.2.3"
 tracing-log = "^0.2"

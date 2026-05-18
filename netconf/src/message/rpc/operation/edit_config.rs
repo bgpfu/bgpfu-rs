@@ -1,10 +1,12 @@
-use std::{fmt::Debug, io::Write};
+use std::{
+    fmt::Debug,
+    io::{self, Write},
+};
 
 use quick_xml::{events::BytesText, Writer};
 
 use crate::{
     capabilities::{Capability, Requirements},
-    message::WriteError,
     session::Context,
     Error,
 };
@@ -34,7 +36,7 @@ impl<D> WriteXml for EditConfig<D>
 where
     D: WriteXml + Debug + Send + Sync,
 {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         writer
             .create_element(Self::NAME)
             .write_inner_content(|writer| {
@@ -153,7 +155,7 @@ impl<D> WriteXml for Source<D>
 where
     D: WriteXml,
 {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         match self {
             Self::Config(config) => writer
                 .create_element("config")

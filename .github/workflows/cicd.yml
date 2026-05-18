@@ -35,6 +35,17 @@ jobs:
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  flake-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v17
+        with:
+          name: wolcomm-public
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - run: nix flake check
+
   build-junos-agent:
     name: build-junos-agent
     needs:
@@ -43,11 +54,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: install nix
-        uses: cachix/install-nix-action@v26
-      - name: enable nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@v6
+        uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v17
+        with:
+          name: wolcomm-public
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
       - name: set-up signing certs
         run: |
           mkdir -p /tmp/certs
@@ -77,7 +90,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: download build artifacts
         uses: actions/download-artifact@v4
         with:

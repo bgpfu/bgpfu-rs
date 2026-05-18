@@ -14,7 +14,7 @@ use netconf::message::{rpc::operation::Datastore, ReadError, ReadXml};
 use quick_xml::{
     events::{BytesStart, Event},
     name::{Namespace, ResolveResult},
-    NsReader,
+    NsReader, XmlVersion,
 };
 use rpsl::expr::MpFilterExpr;
 
@@ -145,16 +145,17 @@ impl ReadXml for Maybe<Candidate> {
         // malformed mp-filter expr.
         for attr in start.attributes().with_checks(false) {
             let attr = attr.map_err(|err| ReadError::Other(err.into()))?;
-            match reader.resolve_attribute(attr.key) {
+            match reader.resolver().resolve_attribute(attr.key) {
                 (ResolveResult::Bound(JCMD), name)
-                    if name.as_ref() == b"active" && attr.unescape_value()? == "false" =>
+                    if name.as_ref() == b"active"
+                        && attr.normalized_value(XmlVersion::Implicit1_0)? == "false" =>
                 {
                     tracing::debug!("skipping inactive policy-statement");
                     _ = reader.read_to_end(end.name())?;
                     return Ok(Self(None));
                 }
                 (ResolveResult::Bound(JCMD), name) if name.as_ref() == b"comment" => {
-                    let attr_value = attr.unescape_value()?;
+                    let attr_value = attr.normalized_value(XmlVersion::Implicit1_0)?;
                     let raw_expr = attr_value
                         .trim_matches(['/', '*'].as_slice())
                         .trim()
@@ -184,7 +185,12 @@ impl ReadXml for Maybe<Candidate> {
                 (ResolveResult::Bound(XNM), Event::Start(tag))
                     if tag.local_name().as_ref() == b"name" && name.is_none() =>
                 {
-                    name = Some(reader.read_text(tag.to_end().name()).map(Name::new)?);
+                    name = Some(
+                        reader
+                            .read_text(tag.to_end().name())?
+                            .xml10_content()
+                            .map(Name::new)?,
+                    );
                 }
                 (ResolveResult::Bound(XNM), Event::Start(tag))
                     if tag.local_name().as_ref() == b"then" && !reject_policy =>
@@ -243,7 +249,12 @@ impl ReadXml for Maybe<Installed> {
                     if tag.local_name().as_ref() == b"name" && name.is_none() =>
                 {
                     tracing::debug!(?tag);
-                    name = Some(reader.read_text(tag.to_end().name()).map(Name::new)?);
+                    name = Some(
+                        reader
+                            .read_text(tag.to_end().name())?
+                            .xml10_content()
+                            .map(Name::new)?,
+                    );
                     tracing::debug!(?name);
                 }
                 (ResolveResult::Bound(XNM), Event::Start(tag))
@@ -343,7 +354,7 @@ impl<'i> BorrowedReadXml<'i> for Term<'i> {
                     if tag.local_name().as_ref() == b"name" && name.is_none() =>
                 {
                     tracing::trace!(?tag);
-                    name = Some(reader.read_text(tag.to_end().name())?);
+                    name = Some(reader.read_text(tag.to_end().name())?.xml10_content()?);
                 }
                 (ResolveResult::Bound(XNM), Event::Start(tag))
                     if tag.local_name().as_ref() == b"from" && from.is_none() =>
@@ -430,7 +441,7 @@ impl TermFrom<'_> {
             }
             (afi, family) => {
                 return Err(ReadError::Other(
-                    anyhow!("can't parse '{family}' term into {afi} prefix-ranges",).into(),
+                    anyhow!("can't parse '{family}' term into {afi} prefix-ranges").into(),
                 ))
             }
         }
@@ -477,7 +488,7 @@ impl<'i> BorrowedReadXml<'i> for TermFrom<'i> {
                     if tag.local_name().as_ref() == b"family" && family.is_none() =>
                 {
                     tracing::trace!(?tag);
-                    family = Some(reader.read_text(tag.to_end().name())?);
+                    family = Some(reader.read_text(tag.to_end().name())?.xml10_content()?);
                 }
                 (ResolveResult::Bound(XNM), Event::Start(tag))
                     if tag.local_name().as_ref() == b"route-filter" =>
@@ -523,14 +534,14 @@ impl<'i> BorrowedReadXml<'i> for RouteFilter<'i> {
                     if tag.local_name().as_ref() == b"address" && address.is_none() =>
                 {
                     tracing::trace!(?tag);
-                    address = Some(reader.read_text(tag.to_end().name())?);
+                    address = Some(reader.read_text(tag.to_end().name())?.xml10_content()?);
                 }
                 (ResolveResult::Bound(XNM), Event::Start(tag))
                     if tag.local_name().as_ref() == b"choice-ident"
                         && prefix_length_range.is_none() =>
                 {
                     tracing::trace!(?tag);
-                    let ident = reader.read_text(tag.to_end().name())?;
+                    let ident = reader.read_text(tag.to_end().name())?.xml10_content()?;
                     if ident.as_ref() != "prefix-length-range" {
                         return Err(ReadError::Other(
                             anyhow!("unexpected 'choice-ident' value '{ident}'").into(),
@@ -542,7 +553,8 @@ impl<'i> BorrowedReadXml<'i> for RouteFilter<'i> {
                                 if tag.local_name().as_ref() == b"choice-value" =>
                             {
                                 tracing::trace!(?tag);
-                                prefix_length_range = Some(reader.read_text(tag.to_end().name())?);
+                                prefix_length_range =
+                                    Some(reader.read_text(tag.to_end().name())?.xml10_content()?);
                                 break;
                             }
                             (_, Event::Comment(_)) => (),
@@ -644,7 +656,8 @@ mod tests {
             .collect(),
         };
         let mut reader = NsReader::from_str(input);
-        let (_, Event::Start(start)) = reader.trim_text(true).read_resolved_event().unwrap() else {
+        reader.config_mut().trim_text(true);
+        let (_, Event::Start(start)) = reader.read_resolved_event().unwrap() else {
             panic!("expected valid start tag");
         };
         let read = Policies::read_xml(&mut reader, &start).unwrap();
@@ -659,7 +672,7 @@ mod tests {
                 fn $name() {
                     let doc = format!("<root>{}</root>", $input);
                     let mut reader = NsReader::from_str(&doc);
-                    _ = reader.trim_text(true);
+                    reader.config_mut().trim_text(true);
                     let mut result = None;
                     loop {
                         match reader.read_resolved_event().unwrap() {
@@ -693,18 +706,18 @@ mod tests {
                 </configuration>
             " => Policies::default()
         }
-        #[should_panic(expected = r#"Xml(EndEventMismatch { expected: "configuration", found: "noitarugifnoc" })"#)]
+        #[should_panic(expected = r#"Xml(IllFormed(MismatchedEndTag { expected: "configuration", found: "noitarugifnoc" }))"#)]
         mismatched_root {
             r#"<configuration xmlns="http://xml.juniper.net/xnm/1.1/xnm"></noitarugifnoc>"# => Policies::default()
         }
-        #[should_panic(expected = r#"Xml(EndEventMismatch { expected: "configuration", found: "root" })"#)]
+        #[should_panic(expected = r#"Xml(IllFormed(MismatchedEndTag { expected: "configuration", found: "root" }))"#)]
         premature_eof_in_configuration {
             r#"
                 <configuration xmlns="http://xml.juniper.net/xnm/1.1/xnm">
                     <policy-options></policy-options>
             "# => Policies::default()
         }
-        #[should_panic(expected = r#"Xml(EndEventMismatch { expected: "policy-options", found: "root" })"#)]
+        #[should_panic(expected = r#"Xml(IllFormed(MismatchedEndTag { expected: "policy-options", found: "root" }))"#)]
         premature_eof_in_policy_options {
             r#"
                 <configuration xmlns="http://xml.juniper.net/xnm/1.1/xnm">

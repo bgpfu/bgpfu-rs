@@ -5,9 +5,17 @@ use super::rpc;
 pub enum Read {
     Xml(#[from] quick_xml::Error),
 
+    /// XML attribute parsing failed.
+    #[error("failed to parse an XML attribute")]
+    XmlAttribute(#[from] quick_xml::events::attributes::AttrError),
+
     /// UTF-8 decoding failed.
     #[error("failed to decode utf-8")]
     DecodeMessage(#[from] std::str::Utf8Error),
+
+    /// XML content decoding failed.
+    #[error("failed to decode XML 1.0 content")]
+    XmlContentDecoding(#[from] quick_xml::encoding::EncodingError),
 
     /// Failed to parse a [`MessageId`][rpc::MessageId].
     #[error("failed to parse message-id")]
@@ -65,11 +73,11 @@ impl Read {
 #[derive(Debug, thiserror::Error)]
 #[error("failed to serialize message content as XML")]
 pub enum Write {
-    Xml(#[from] quick_xml::Error),
+    /// XML serialization failed
+    #[error("failed to serialize message content")]
+    Xml(#[from] std::io::Error),
 
     /// UTF-8 encoding failed.
     #[error("failed to utf-8 encode message")]
     EncodeMessage(#[from] std::string::FromUtf8Error),
-
-    Other(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
 }

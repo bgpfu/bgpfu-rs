@@ -1,4 +1,9 @@
-use std::{borrow::Cow, fmt::Debug, io::Write, sync::Arc};
+use std::{
+    borrow::Cow,
+    fmt::Debug,
+    io::{self, Write},
+    sync::Arc,
+};
 
 use quick_xml::{
     events::{attributes::Attribute, BytesStart, Event},
@@ -14,7 +19,7 @@ use crate::{
             operation::{self, params::Required},
             Errors, IntoResult, Operation,
         },
-        xmlns, ReadError, ReadXml, WriteError, WriteXml,
+        xmlns, ReadError, ReadXml, WriteXml,
     },
     session::Context,
 };
@@ -45,7 +50,7 @@ impl<S> WriteXml for LoadConfiguration<S>
 where
     S: Source + Debug + Send + Sync,
 {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         let elem = writer.create_element(Self::NAME);
         self.source.write_element(elem)
     }
@@ -56,7 +61,7 @@ trait AsAttribute {
 }
 
 trait Source {
-    fn write_element<W: Write>(&self, elem: ElementWriter<'_, W>) -> Result<(), WriteError>;
+    fn write_element<W: Write>(&self, elem: ElementWriter<'_, W>) -> Result<(), io::Error>;
 }
 
 #[derive(Debug, Clone)]
@@ -67,7 +72,7 @@ impl AsAttribute for ConfigurationRevision {
     }
 }
 impl Source for ConfigurationRevision {
-    fn write_element<W: Write>(&self, elem: ElementWriter<'_, W>) -> Result<(), WriteError> {
+    fn write_element<W: Write>(&self, elem: ElementWriter<'_, W>) -> Result<(), io::Error> {
         _ = elem.with_attribute(self.as_attribute()).write_empty()?;
         Ok(())
     }
@@ -81,7 +86,7 @@ impl AsAttribute for Rescue {
     }
 }
 impl Source for Rescue {
-    fn write_element<W: Write>(&self, elem: ElementWriter<'_, W>) -> Result<(), WriteError> {
+    fn write_element<W: Write>(&self, elem: ElementWriter<'_, W>) -> Result<(), io::Error> {
         _ = elem.with_attribute(self.as_attribute()).write_empty()?;
         Ok(())
     }
@@ -98,7 +103,7 @@ impl AsAttribute for Rollback {
     }
 }
 impl Source for Rollback {
-    fn write_element<W: Write>(&self, elem: ElementWriter<'_, W>) -> Result<(), WriteError> {
+    fn write_element<W: Write>(&self, elem: ElementWriter<'_, W>) -> Result<(), io::Error> {
         _ = elem.with_attribute(self.as_attribute()).write_empty()?;
         Ok(())
     }
@@ -126,7 +131,7 @@ where
     A: Action<F>,
     D: ConfigData<F, A>,
 {
-    fn write_element<W: Write>(&self, elem: ElementWriter<'_, W>) -> Result<(), WriteError> {
+    fn write_element<W: Write>(&self, elem: ElementWriter<'_, W>) -> Result<(), io::Error> {
         elem.with_attribute(self.format.as_attribute())
             .with_attribute(self.action.as_attribute())
             .write_inner_content(|writer| self.data.write_data(writer))
@@ -152,7 +157,7 @@ where
     A: Action<F>,
     F: Format,
 {
-    fn write_element<W: Write>(&self, elem: ElementWriter<'_, W>) -> Result<(), WriteError> {
+    fn write_element<W: Write>(&self, elem: ElementWriter<'_, W>) -> Result<(), io::Error> {
         _ = elem
             .with_attribute(self.as_attribute())
             .with_attribute(self.format.as_attribute())
@@ -204,7 +209,7 @@ where
     F: Format,
     A: Action<F>,
 {
-    fn write_data<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError>;
+    fn write_data<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error>;
 }
 
 impl<D, A> ConfigData<Text, A> for D
@@ -212,15 +217,10 @@ where
     D: AsRef<str>,
     A: Action<Text>,
 {
-    fn write_data<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_data<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         writer
             .create_element(A::TAG)
-            .write_inner_content(|writer| {
-                writer
-                    .get_mut()
-                    .write_all(self.as_ref().as_bytes())
-                    .map_err(|err| WriteError::Other(err.into()))
-            })
+            .write_inner_content(|writer| writer.get_mut().write_all(self.as_ref().as_bytes()))
             .map(|_| ())
     }
 }
@@ -230,7 +230,7 @@ where
     D: WriteXml,
     A: Action<Xml>,
 {
-    fn write_data<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_data<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         self.write_xml(writer)
     }
 }
@@ -241,15 +241,10 @@ where
     D: AsRef<str>,
     A: Action<Json>,
 {
-    fn write_data<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_data<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         writer
             .create_element(A::TAG)
-            .write_inner_content(|writer| {
-                writer
-                    .get_mut()
-                    .write_all(self.as_ref().as_bytes())
-                    .map_err(|err| WriteError::Other(err.into()))
-            })
+            .write_inner_content(|writer| writer.get_mut().write_all(self.as_ref().as_bytes()))
             .map(|_| ())
     }
 }
@@ -436,6 +431,7 @@ impl ReadXml for Reply {
                                 error_count = Some(
                                     reader
                                         .read_text(tag.to_end().name())?
+                                        .xml10_content()?
                                         .parse::<usize>()
                                         .map_err(|err| ReadError::Other(err.into()))?,
                                 );

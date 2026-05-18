@@ -2,7 +2,7 @@ use std::{
     borrow::Cow,
     collections::{BTreeSet, HashSet},
     fmt::Display,
-    io::Write,
+    io::{self, Write},
     str::FromStr,
     sync::Arc,
 };
@@ -15,7 +15,7 @@ use quick_xml::{
 };
 
 use crate::{
-    message::{xmlns, ReadError, ReadXml, WriteError, WriteXml},
+    message::{xmlns, ReadError, ReadXml, WriteXml},
     Error,
 };
 
@@ -64,7 +64,7 @@ impl ReadXml for Capabilities {
                 {
                     let span = reader.read_text(tag.to_end().name())?;
                     tracing::debug!(?span, "parsing capability");
-                    _ = inner.insert(span.parse()?);
+                    _ = inner.insert(span.xml10_content()?.parse()?);
                 }
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
@@ -78,7 +78,7 @@ impl ReadXml for Capabilities {
 }
 
 impl WriteXml for Capabilities {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         _ = writer
             .create_element("capabilities")
             .write_inner_content(|writer| {
@@ -218,7 +218,7 @@ impl Capability {
 }
 
 impl WriteXml for Capability {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         _ = writer
             .create_element("capability")
             .write_text_content(BytesText::new(&self.uri()))?;

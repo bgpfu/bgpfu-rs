@@ -7,7 +7,7 @@ let
   };
 
   toolchains = import ./toolchains.nix {
-    inherit pkgs fenix platforms toolchainManifests;
+    inherit pkgs crane fenix platforms toolchainManifests;
   };
 
   cargo = import ./cargo.nix {

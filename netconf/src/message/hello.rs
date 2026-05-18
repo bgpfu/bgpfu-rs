@@ -1,4 +1,7 @@
-use std::{fmt::Debug, io::Write};
+use std::{
+    fmt::Debug,
+    io::{self, Write},
+};
 
 use quick_xml::{
     events::{BytesStart, Event},
@@ -11,7 +14,7 @@ use crate::{
     session::SessionId,
 };
 
-use super::{xmlns, ClientMsg, ReadError, ReadXml, ServerMsg, WriteError, WriteXml};
+use super::{xmlns, ClientMsg, ReadError, ReadXml, ServerMsg, WriteXml};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ServerHello {
@@ -53,7 +56,7 @@ impl ReadXml for ServerHello {
                     tracing::debug!(?tag);
                     let span = reader.read_text(tag.to_end().name())?;
                     tracing::debug!(?span, "trying to parse session_id");
-                    session_id = Some(span.parse()?);
+                    session_id = Some(span.xml10_content()?.parse()?);
                     tracing::debug!(?session_id);
                 }
                 (_, Event::Comment(_)) => (),
@@ -106,7 +109,7 @@ impl Default for ClientHello {
 }
 
 impl WriteXml for ClientHello {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         _ = writer
             .create_element("hello")
             .write_inner_content(|writer| self.capabilities.write_xml(writer))?;

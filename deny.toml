@@ -1,18 +1,18 @@
 all-features = true
 
 [licenses]
-copyleft = "deny"
-allow = [
-    "Apache-2.0",
-    "BSD-3-Clause",
-    "ISC",
-    "MIT",
-]
+allow = ["Apache-2.0", "BSD-3-Clause", "ISC", "MIT"]
 confidence-threshold = 0.8
 exceptions = [
-    { name = "ring", allow = ["OpenSSL"] },
-    { name = "option-ext", allow = ["MPL-2.0"] },
-    { name = "unicode-ident", allow = ["Unicode-DFS-2016"] },
+  { name = "ring", allow = [
+    "OpenSSL",
+  ] },
+  { name = "option-ext", allow = [
+    "MPL-2.0",
+  ] },
+  { name = "unicode-ident", allow = [
+    "Unicode-3.0",
+  ] },
 ]
 
 [[licenses.clarify]]

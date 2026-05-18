@@ -166,7 +166,7 @@ macro_rules! trivial_ops {
                         fn write_xml<W>(
                             &self,
                             writer: &mut quick_xml::Writer<W>
-                        ) -> Result<(), $crate::message::WriteError>
+                        ) -> Result<(), std::io::Error>
                         where
                             W: std::io::Write,
                         {

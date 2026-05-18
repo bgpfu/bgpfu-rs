@@ -152,6 +152,10 @@ impl OutstandingRequest {
 #[cfg(feature = "ssh")]
 impl Session<Ssh> {
     /// Establish a new NETCONF session over an SSH transport.
+    ///
+    /// # Errors
+    ///
+    /// An [`Error`] is returned if the underlying SSH session fails to establish successfully.
     #[tracing::instrument(level = "debug")]
     pub async fn ssh<A>(addr: A, username: String, password: Password) -> Result<Self, Error>
     where
@@ -166,6 +170,10 @@ impl Session<Ssh> {
 #[cfg(feature = "tls")]
 impl Session<Tls> {
     /// Establish a new NETCONF session over a TLS transport.
+    ///
+    /// # Errors
+    ///
+    /// An [`Error`] is returned if the underlying TLS connection fails to establish successfully.
     #[tracing::instrument(skip(ca_cert, client_cert, client_key), level = "debug")]
     pub async fn tls<A, S>(
         addr: A,
@@ -188,6 +196,10 @@ impl Session<Tls> {
 #[cfg(feature = "junos")]
 impl Session<JunosLocal> {
     /// Establish a new NETCONF session via the local Junos `cli` binary.
+    ///
+    /// # Errors
+    ///
+    /// An [`Error`] is returned if the `cli` subprocess can't be spawned successfully.
     #[tracing::instrument(level = "debug")]
     pub async fn junos_local() -> Result<Self, Error> {
         tracing::info!("starting local junos transport");
@@ -247,6 +259,8 @@ impl<T: Transport> Session<T> {
     /// the NETCONF server asynchronously and then the response is later received asynchronously.
     ///
     /// The `Output` of both the outer and inner `Future` are of type `Result`.
+    ///
+    /// # Errors
     ///
     /// An [`Err`] variant returned by awaiting the outer future indicates either a request validation
     /// error or a session/transport error encountered while sending the RPC request.
@@ -332,6 +346,10 @@ impl<T: Transport> Session<T> {
     }
 
     /// Close the NETCONF session gracefully using the `<close-session>` RPC operation.
+    ///
+    /// # Errors
+    ///
+    /// See [`Session::rpc`].
     #[tracing::instrument(skip(self), level = "debug")]
     pub async fn close(mut self) -> Result<impl Future<Output = Result<(), Error>>, Error> {
         self.rpc::<CloseSession, _>(Builder::finish)

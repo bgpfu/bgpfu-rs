@@ -1,6 +1,6 @@
 use std::{
     fmt::{self, Debug, Display},
-    io::Write,
+    io::{self, Write},
     ops::Deref,
     sync::Arc,
     time::Duration,
@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::{
     capabilities::{Capability, Requirements},
-    message::{ReadError, ReadXml, WriteError, WriteXml},
+    message::{ReadError, ReadXml, WriteXml},
     session::Context,
     Error,
 };
@@ -175,7 +175,7 @@ impl Datastore {
 }
 
 impl WriteXml for Datastore {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         _ = writer.create_element(self.as_str()).write_empty()?;
         Ok(())
     }
@@ -189,18 +189,13 @@ pub enum Source {
 }
 
 impl WriteXml for Source {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         match self {
             Self::Datastore(datastore) => datastore.write_xml(writer)?,
             Self::Config(config) => {
                 _ = writer
                     .create_element("config")
-                    .write_inner_content(|writer| {
-                        writer
-                            .get_mut()
-                            .write_all(config.as_bytes())
-                            .map_err(|err| WriteError::Other(err.into()))
-                    })?;
+                    .write_inner_content(|writer| writer.get_mut().write_all(config.as_bytes()))?;
             }
             Self::Url(url) => url.write_xml(writer)?,
         }
@@ -239,17 +234,14 @@ impl Filter {
 }
 
 impl WriteXml for Filter {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         let elem = writer
             .create_element("filter")
             .with_attribute(("type", self.as_str()));
         _ = match self {
-            Self::Subtree(filter) => elem.write_inner_content(|writer| {
-                writer
-                    .get_mut()
-                    .write_all(filter.as_bytes())
-                    .map_err(|err| WriteError::Other(err.into()))
-            })?,
+            Self::Subtree(filter) => {
+                elem.write_inner_content(|writer| writer.get_mut().write_all(filter.as_bytes()))?
+            }
             Self::XPath(select) => elem
                 .with_attribute(("select", select.as_str()))
                 .write_empty()?,
@@ -274,18 +266,15 @@ impl ReadXml for Opaque {
     #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "debug")]
     fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
-        let inner = reader.read_text(end.name())?.into();
+        let inner = reader.read_text(end.name())?.xml10_content()?.into();
         Ok(Self { inner })
     }
 }
 
 impl WriteXml for Opaque {
     #[tracing::instrument(skip(writer))]
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
-        writer
-            .get_mut()
-            .write_all(self.as_bytes())
-            .map_err(|err| WriteError::Other(err.into()))
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
+        writer.get_mut().write_all(self.as_bytes())
     }
 }
 
@@ -345,7 +334,7 @@ impl Display for Url {
 }
 
 impl WriteXml for Url {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         _ = writer
             .create_element("url")
             .write_text_content(BytesText::new(self.inner.as_str()))?;
@@ -397,7 +386,7 @@ impl Timeout {
 
 impl Default for Timeout {
     fn default() -> Self {
-        Self(Duration::from_secs(600))
+        Self(Duration::from_mins(10))
     }
 }
 
@@ -415,7 +404,7 @@ mod tests {
         };
         let msg = format!("<data>{reply}</data>");
         let mut reader = NsReader::from_str(msg.as_str());
-        _ = reader.trim_text(true);
+        reader.config_mut().trim_text(true);
         if let Event::Start(start) = reader.read_event().unwrap() {
             assert_eq!(Opaque::read_xml(&mut reader, &start).unwrap(), expect);
         } else {
