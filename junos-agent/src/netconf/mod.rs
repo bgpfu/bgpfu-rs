@@ -21,7 +21,7 @@ use crate::{
 };
 
 mod pem;
-use self::pem::{read_cert, read_private_key};
+use self::pem::read_item;
 
 pub(crate) trait Target: Debug + Clone + Sized + Send {
     type Transport: Transport;
@@ -75,9 +75,9 @@ impl Target for Remote {
         );
         tracing::debug!(?ca_cert_path, ?client_cert_path, ?client_key_path);
         let (ca_cert, client_cert, client_key) = tokio::try_join!(
-            read_cert(ca_cert_path),
-            read_cert(client_cert_path),
-            read_private_key(client_key_path)
+            read_item(ca_cert_path),
+            read_item(client_cert_path),
+            read_item(client_key_path)
         )?;
         let server_name = match self.opts.tls_server_name() {
             Some(name) => name,

@@ -139,7 +139,7 @@ macro_rules! trivial_ops {
             const NAME = $name:literal;
         }
     )* ) => {
-        paste::paste! {
+        pastey::paste! {
             $(
                 #[doc(inline)]
                 $vis use self::[<$oper_ty:snake>]::$oper_ty;

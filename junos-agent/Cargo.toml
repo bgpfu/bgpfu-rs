@@ -25,7 +25,6 @@ generic-ip.workspace = true
 quick-xml.workspace = true
 rolling-file.workspace = true
 rpsl.workspace = true
-rustls-pemfile.workspace = true
 rustls-pki-types.workspace = true
 tracing.workspace = true
 tracing-appender.workspace = true
