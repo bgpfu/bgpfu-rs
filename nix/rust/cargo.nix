@@ -30,6 +30,7 @@ let
       inherit (featureSet) name set;
       featureArgs =
         if name == "default" then ""
+        else if name == "all" then "--all-features"
         else "--no-default-features"
           + optionalString (length set > 0) " -F ${concatStringsSep "," set}";
       cargoArtifacts = buildDeps {
@@ -54,8 +55,10 @@ let
         else concatStringsSep "+" set;
       nonDefaultFeatures = remove "default" features;
     in
-    [{ name = "default"; set = null; }]
-    ++ optionals (length features > 0) (map
+    [
+      { name = "default"; set = null; }
+      { name = "all"; set = null; }
+    ] ++ optionals (length features > 0) (map
       (set: { name = setName set; inherit set; })
       (powerSet nonDefaultFeatures));
 
@@ -83,6 +86,23 @@ let
         taplo-fmt = craneLib.taploFmt (commonArgs // {
           taploExtraArgs = "--diff";
         });
+        docs = checkGroup "docs" (map
+          ({ name, ... }: {
+            inherit name;
+            path = craneLib.cargoDoc (buildArgs {
+              inherit toolchainName;
+              featureSet = { name = "all"; set = null; };
+              packageName = name;
+              withDependencies = true;
+            } // {
+              RUSTDOCFLAGS = concatStringsSep " " ([
+                "-D warnings"
+              ] ++ optionals (toolchainName == "nightly") [
+                "--cfg docsrs "
+              ]);
+            });
+          })
+          packages);
         clippy = checkGroup "clippy" (map
           ({ name, featureSets }: {
             inherit name;
