@@ -39,7 +39,7 @@
 #![warn(variant_size_differences)]
 #![cfg_attr(any(feature = "ssh", feature = "tls"), warn(unused_crate_dependencies))]
 // docs.rs build config
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 // omit everything if we don't have a transport feature enabled
 #![cfg(any(feature = "ssh", feature = "tls"))]
 

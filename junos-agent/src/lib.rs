@@ -39,7 +39,7 @@
 #![warn(unused_results)]
 #![warn(variant_size_differences)]
 // docs.rs build config
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod cli;
 pub use self::cli::main;
