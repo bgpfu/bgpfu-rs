@@ -86,23 +86,19 @@ let
         taplo-fmt = craneLib.taploFmt (commonArgs // {
           taploExtraArgs = "--diff";
         });
-        docs = checkGroup "docs" (map
-          ({ name, ... }: {
-            inherit name;
-            path = craneLib.cargoDoc (buildArgs {
-              inherit toolchainName;
-              featureSet = { name = "all"; set = null; };
-              packageName = name;
-              withDependencies = true;
-            } // {
-              RUSTDOCFLAGS = concatStringsSep " " ([
-                "-D warnings"
-              ] ++ optionals (toolchainName == "nightly") [
-                "--cfg docsrs "
-              ]);
-            });
-          })
-          packages);
+        docs = craneLib.cargoDoc (commonArgs // rec {
+          pname = "bgpfu-${toolchainName}";
+          cargoExtraArgs = "--workspace --all-features";
+          cargoArtifacts = craneLib.buildDepsOnly {
+            inherit src pname cargoExtraArgs;
+          };
+          cargoDocExtraArgs = "--no-deps --lib";
+          RUSTDOCFLAGS = concatStringsSep " " ([
+            "-D warnings"
+          ] ++ optionals (toolchainName == "nightly") [
+            "--cfg docsrs"
+          ]);
+        });
         clippy = checkGroup "clippy" (map
           ({ name, featureSets }: {
             inherit name;
