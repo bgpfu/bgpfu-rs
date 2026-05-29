@@ -148,7 +148,7 @@ let
     toolchains;
 
   devShells = mapAttrs
-    (toolchainName: { craneLib, ... }:
+    (toolchainName: { craneLib, toolchain }:
     let
       checksForToolchain =
         let
@@ -163,16 +163,14 @@ let
             (name: mapRecursive (path ++ [ name ]) set.checks.${name})
             (lib.attrNames set.checks);
         in lib.listToAttrs (recurse [ ] checks.${toolchainName});
-      # checksForToolchain = checks.${toolchainName}.checks;
-      # basicChecks = checks: lib.filterAtttrs (n: v: !(v ? checks)) checks;
-      # clippyChecks = lib.mapAttrs' (n: v: nameValuePair "clippy-${n}" v.checks.default) checksForToolchain.clippy.checks;
-      # llvmChecks = lib.mapAttrs' (n: v: nameValuePair "llvm-cov-${n}" v.checks.default) checksForToolchain.llvm-cov.checks;
     in
       craneLib.devShell {
         checks = checksForToolchain;
-        # checks = clippyChecks // {
-        #   inherit (checksForToolchain) audit deny fmt taplo-fmt llvm-cov;
-        # };
+        TOOLCHAIN = toolchain;
+        shellHook = ''
+          export CARGO_HOME="$XDG_DATA_HOME/cargo"
+          source "$TOOLCHAIN/etc/bash_completion.d/cargo"
+        '';
       }
     )
     toolchains;
