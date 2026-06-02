@@ -1,6 +1,6 @@
 { pkgs, crane, toolchains, advisory-db, src }:
 let
-  inherit (pkgs) lib linkFarm;
+  inherit (pkgs) lib linkFarm writeTextFile;
   inherit (builtins) attrNames length listToAttrs mapAttrs;
   inherit (lib) concatStringsSep findSingle importJSON
     nameValuePair optionals optionalAttrs optionalString remove;
@@ -63,8 +63,16 @@ let
       (powerSet nonDefaultFeatures));
 
   checkGroup = name: entries:
-    let group = linkFarm "${name}-checks" entries; in
-    group.overrideAttrs (_: prev: { passthru.checks = prev.passthru.entries; });
+    let
+      group = linkFarm "${name}-checks" entries;
+      matrix = pkgs.writeText "matrix.json" (builtins.toJSON (lib.attrNames entries));
+    in
+    group.overrideAttrs (_: prev: {
+      passthru = {
+        inherit matrix;
+        checks = prev.passthru.entries;
+      };
+    });
 
   checks = mapAttrs
     (toolchainName: { toolchain, craneLib }:
