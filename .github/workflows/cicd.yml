@@ -50,7 +50,7 @@ jobs:
           name: wolcomm-public
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
       - run: |
-          nix build .#checks.x86_64-linux.${TOOLCHAIN}
+          nix build .#checks.x86_64-linux.${TOOLCHAIN}.matrix
           echo "matrix=$(<result)" >> ${GITHUB_OUTPUT}
         env:
           TOOLCHAIN: ${{ matrix.toolchain }}
