@@ -38,6 +38,7 @@ jobs:
   generate-matrix:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         toolchain: [msrv, stable, nightly]
     outputs:
@@ -60,6 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: generate-matrix
     strategy:
+      fail-fast: false
       matrix:
         toolchain: [msrv, stable, nightly]
         check: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
