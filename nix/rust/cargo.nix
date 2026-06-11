@@ -1,7 +1,7 @@
 { pkgs, crane, toolchains, advisory-db, src }:
 let
-  inherit (pkgs) lib linkFarm writeTextFile;
-  inherit (builtins) attrNames length listToAttrs mapAttrs;
+  inherit (pkgs) lib linkFarm writeText;
+  inherit (builtins) attrNames length listToAttrs mapAttrs toJSON;
   inherit (lib) concatStringsSep findSingle importJSON
     nameValuePair optionals optionalAttrs optionalString remove;
 
@@ -65,12 +65,27 @@ let
   checkGroup = name: entries:
     let
       group = linkFarm "${name}-checks" entries;
-      matrix = pkgs.writeText "matrix.json" (builtins.toJSON (lib.attrNames entries));
     in
-    group.overrideAttrs (_: prev: {
-      passthru = {
-        inherit matrix;
+    group.overrideAttrs (_: prev:
+      let
         checks = prev.passthru.entries;
+        flatChecks =
+          let
+            pred = value: value ? checks;
+            name = path: lib.concatStringsSep "_" path;
+            item = path: value: lib.nameValuePair (name path) value;
+            mapRecursive = path: value:
+              if lib.isAttrs value && pred value
+              then recurse path value.checks
+              else [ (item path value) ];
+            recurse = path: set: lib.concatMap
+              (name: mapRecursive (path ++ [ name ]) set.${name})
+              (lib.attrNames set);
+          in lib.listToAttrs (recurse [ ] checks);
+        matrix = writeText "${name}-matrix.json" (toJSON (attrNames flatChecks));
+      in {
+      passthru = {
+        inherit checks matrix flatChecks;
       };
     });
 
@@ -153,30 +168,14 @@ let
 
   devShells = mapAttrs
     (toolchainName: { craneLib, toolchain }:
-    let
-      checksForToolchain =
-        let
-          pred = value: value ? checks;
-          name = path: lib.concatStringsSep "_" path;
-          item = path: value: lib.nameValuePair (name path) value;
-          mapRecursive = path: value:
-            if lib.isAttrs value && pred value
-            then recurse path value
-            else [ (item path value) ];
-          recurse = path: set: lib.concatMap
-            (name: mapRecursive (path ++ [ name ]) set.checks.${name})
-            (lib.attrNames set.checks);
-        in lib.listToAttrs (recurse [ ] checks.${toolchainName});
-    in
       craneLib.devShell {
-        checks = checksForToolchain;
+        checks = checks.${toolchainName}.flatChecks;
         TOOLCHAIN = toolchain;
         shellHook = ''
           export CARGO_HOME="$XDG_DATA_HOME/cargo"
           source "$TOOLCHAIN/etc/bash_completion.d/cargo"
         '';
-      }
-    )
+      })
     toolchains;
 
 
