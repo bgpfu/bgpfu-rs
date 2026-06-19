@@ -3,11 +3,11 @@
     "advisory-db": {
       "flake": false,
       "locked": {
-        "lastModified": 1781177708,
-        "narHash": "sha256-kPEHVvF8LezCSBN4AXlsVK+4BsC3upoJK4wD1IjB/lo=",
+        "lastModified": 1781783913,
+        "narHash": "sha256-7cmYYYEBoubfZxKeHsTkWyR/l7LFFVeIaxtJAYs7eOU=",
         "owner": "rustsec",
         "repo": "advisory-db",
-        "rev": "254ee9eb7b48bdbdab5773add0cbd5f17273f4f5",
+        "rev": "776615bd369e17d3112d06b5647d4294f9ab952c",
         "type": "github"
       },
       "original": {
@@ -102,7 +102,7 @@
     "nightly-manifest": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-aXRfzU2T7SoOYeaKSMfggUoErGR7MI/1zAUfy+QNk28=",
+        "narHash": "sha256-BaquA7f8HYgmuO+XXIBa3E5NleGvWnvg3QpEHywHCcA=",
         "type": "file",
         "url": "https://static.rust-lang.org/dist/channel-rust-nightly.toml"
       },
