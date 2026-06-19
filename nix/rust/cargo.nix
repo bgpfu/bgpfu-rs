@@ -88,7 +88,7 @@ let
         jobs = mapAttrsToList
           (name: check: {
             inherit name;
-            postStep = {
+            postStep = toJSON {
               name = "post";
               run = /* bash */ ''
                 echo "no-op"
