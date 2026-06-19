@@ -76,6 +76,7 @@ jobs:
         env:
           TOOLCHAIN: ${{ matrix.toolchain }}
           CHECK: ${{ matrix.check.name }}
+      - ${{ matrix.check.postStep }}
 
   build-junos-agent:
     name: build-junos-agent
