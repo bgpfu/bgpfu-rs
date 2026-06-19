@@ -16,6 +16,9 @@ let
     doCheck = false;
   };
 
+  workspaceMetadata = toolchainName:
+    importJSON (toolchains.${toolchainName}.craneLib.cargoMetadata commonArgs);
+
   buildDeps = { toolchainName, packageName, featureSet } @ args:
     toolchains.${toolchainName}.craneLib.buildDepsOnly (buildArgs args);
 
@@ -92,7 +95,7 @@ let
   checks = mapAttrs
     (toolchainName: { toolchain, craneLib }:
       let
-        metadata = importJSON (craneLib.cargoMetadata commonArgs);
+        metadata = workspaceMetadata toolchainName;
         packages = map
           ({ name, features, ... }: {
             inherit name;
@@ -171,13 +174,13 @@ let
       craneLib.devShell {
         checks = checks.${toolchainName}.flatChecks;
         TOOLCHAIN = toolchain;
+        WORKSPACE_METADATA = toJSON (workspaceMetadata toolchainName);
         shellHook = ''
           export CARGO_HOME="$XDG_DATA_HOME/cargo"
           source "$TOOLCHAIN/etc/bash_completion.d/cargo"
         '';
       })
     toolchains;
-
 
   buildBinWith = { platforms, toolchainName }:
     { pname
@@ -189,7 +192,7 @@ let
       inherit (toolchains.${toolchainName}) craneLib;
       meta =
         let
-          metadata = importJSON (craneLib.cargoMetadata commonArgs);
+          metadata = workspaceMetadata toolchainName;
           packageMetadata = findSingle (p: p.name == pname)
             (throw "package ${pname} not found")
             (throw "duplicate metadata for package ${pname}")
