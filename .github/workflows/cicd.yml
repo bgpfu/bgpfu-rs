@@ -75,18 +75,7 @@ jobs:
       - run: nix build .#checks.x86_64-linux.${TOOLCHAIN}.flatChecks.${CHECK}
         env:
           TOOLCHAIN: ${{ matrix.toolchain }}
-          CHECK: ${{ matrix.check }}
-
-  # flake-check:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v5
-  #     - uses: cachix/install-nix-action@v31
-  #     - uses: cachix/cachix-action@v17
-  #       with:
-  #         name: wolcomm-public
-  #         authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-  #     - run: nix flake check
+          CHECK: ${{ matrix.check.name }}
 
   build-junos-agent:
     name: build-junos-agent

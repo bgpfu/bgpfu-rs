@@ -2,7 +2,7 @@
 let
   inherit (pkgs) lib linkFarm writeText;
   inherit (builtins) attrNames length listToAttrs mapAttrs toJSON;
-  inherit (lib) concatStringsSep findSingle importJSON
+  inherit (lib) concatStringsSep findSingle importJSON mapAttrsToList
     nameValuePair optionals optionalAttrs optionalString remove;
 
   baseLib = crane.mkLib pkgs;
@@ -85,7 +85,12 @@ let
               (name: mapRecursive (path ++ [ name ]) set.${name})
               (lib.attrNames set);
           in lib.listToAttrs (recurse [ ] checks);
-        matrix = writeText "${name}-matrix.json" (toJSON (attrNames flatChecks));
+        jobs = mapAttrsToList
+          (name: check: {
+            inherit name;
+          })
+          flatChecks;
+        matrix = writeText "${name}-matrix.json" (toJSON jobs);
       in {
       passthru = {
         inherit checks matrix flatChecks;
