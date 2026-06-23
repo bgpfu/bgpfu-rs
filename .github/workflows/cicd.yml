@@ -76,7 +76,8 @@ jobs:
         env:
           TOOLCHAIN: ${{ matrix.toolchain }}
           CHECK: ${{ matrix.check.name }}
-      - ${{ fromJSON(matrix.check.postStep) }}
+      - id: post-run
+        run: ${{ matrix.check.postStep }}
 
   build-junos-agent:
     name: build-junos-agent

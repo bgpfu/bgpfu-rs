@@ -88,12 +88,9 @@ let
         jobs = mapAttrsToList
           (name: check: {
             inherit name;
-            postStep = toJSON {
-              name = "post";
-              run = /* bash */ ''
-                echo "no-op"
-              '';
-            };
+            postStep =  /* bash */ ''
+              echo "no-op"
+            '';
           })
           flatChecks;
         matrix = writeText "${name}-matrix.json" (toJSON jobs);
