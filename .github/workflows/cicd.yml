@@ -58,6 +58,7 @@ jobs:
           TOOLCHAIN: ${{ matrix.toolchain }}
 
   checks:
+    name: checks
     runs-on: ubuntu-latest
     needs: generate-matrix
     strategy:
@@ -81,9 +82,7 @@ jobs:
 
   build-junos-agent:
     name: build-junos-agent
-    needs:
-      - lint
-      - test
+    needs: checks
     runs-on: ubuntu-latest
     steps:
       - name: checkout
