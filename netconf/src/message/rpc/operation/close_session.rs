@@ -1,9 +1,9 @@
-use std::io::Write;
+use std::io::{self, Write};
 
 use quick_xml::Writer;
 
 use super::{EmptyReply, Operation, WriteXml};
-use crate::{capabilities::Requirements, message::WriteError, session::Context, Error};
+use crate::{capabilities::Requirements, session::Context, Error};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct CloseSession;
@@ -16,7 +16,7 @@ impl Operation for CloseSession {
 }
 
 impl WriteXml for CloseSession {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         _ = writer.create_element(Self::NAME).write_empty()?;
         Ok(())
     }

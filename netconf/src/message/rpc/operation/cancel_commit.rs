@@ -1,10 +1,9 @@
-use std::io::Write;
+use std::io::{self, Write};
 
 use quick_xml::{events::BytesText, Writer};
 
 use crate::{
     capabilities::{Capability, Requirements},
-    message::WriteError,
     session::Context,
     Error,
 };
@@ -25,7 +24,7 @@ impl Operation for CancelCommit {
 }
 
 impl WriteXml for CancelCommit {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         let elem = writer.create_element("cancel-commit");
         if let Some(ref token) = self.persist_id {
             _ = elem.write_inner_content(|writer| {
@@ -36,7 +35,7 @@ impl WriteXml for CancelCommit {
             })?;
         } else {
             _ = elem.write_empty()?;
-        };
+        }
         Ok(())
     }
 }

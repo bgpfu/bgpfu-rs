@@ -106,7 +106,7 @@ impl ReadXml for BareReply {
                     tracing::debug!(?tag);
                     errors.push(Error::read_xml(reader, &tag)?);
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
@@ -139,7 +139,7 @@ macro_rules! trivial_ops {
             const NAME = $name:literal;
         }
     )* ) => {
-        paste::paste! {
+        pastey::paste! {
             $(
                 #[doc(inline)]
                 $vis use self::[<$oper_ty:snake>]::$oper_ty;
@@ -166,7 +166,7 @@ macro_rules! trivial_ops {
                         fn write_xml<W>(
                             &self,
                             writer: &mut quick_xml::Writer<W>
-                        ) -> Result<(), $crate::message::WriteError>
+                        ) -> Result<(), std::io::Error>
                         where
                             W: std::io::Write,
                         {

@@ -7,7 +7,6 @@
 #![allow(clippy::redundant_pub_crate)]
 #![allow(clippy::multiple_crate_versions)]
 // rustc lints
-#![allow(box_pointers)]
 #![warn(absolute_paths_not_starting_with_crate)]
 #![warn(deprecated_in_future)]
 #![warn(elided_lifetimes_in_paths)]
@@ -21,7 +20,6 @@
 #![warn(missing_docs)]
 #![warn(non_ascii_idents)]
 #![warn(noop_method_call)]
-#![warn(pointer_structural_match)]
 #![warn(rust_2021_incompatible_closure_captures)]
 #![warn(rust_2021_incompatible_or_patterns)]
 #![warn(rust_2021_prefixes_incompatible_syntax)]
@@ -41,7 +39,7 @@
 #![warn(unused_results)]
 #![warn(variant_size_differences)]
 // docs.rs build config
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 /// Error types
 mod error;

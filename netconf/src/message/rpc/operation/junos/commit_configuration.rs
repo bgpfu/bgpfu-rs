@@ -1,4 +1,9 @@
-use std::{fmt::Debug, io::Write, sync::Arc, time::Duration};
+use std::{
+    fmt::Debug,
+    io::{self, Write},
+    sync::Arc,
+    time::Duration,
+};
 
 use chrono::{NaiveDateTime, NaiveTime};
 use quick_xml::{events::BytesText, Writer};
@@ -10,7 +15,7 @@ use crate::{
             operation::{self, Timeout},
             EmptyReply, Operation,
         },
-        WriteError, WriteXml,
+        WriteXml,
     },
     session::Context,
 };
@@ -22,6 +27,7 @@ use crate::{
 /// See [Juniper documentation][junos-docs].
 ///
 /// [junos-docs]: https://www.juniper.net/documentation/us/en/software/junos/netconf/junos-xml-protocol/topics/ref/tag/junos-xml-protocol-commit-configuration.html
+#[allow(clippy::too_long_first_doc_paragraph)]
 #[derive(Debug, Clone)]
 pub struct CommitConfiguration {
     check: bool,
@@ -55,7 +61,7 @@ impl CommitConfiguration {
 }
 
 impl WriteXml for CommitConfiguration {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         let elem = writer.create_element(Self::NAME);
         _ = if self.has_options() {
             elem.write_inner_content(|writer| {
@@ -74,7 +80,7 @@ impl WriteXml for CommitConfiguration {
                 if let Some(ref synchronize) = self.synchronize {
                     synchronize.write_xml(writer)?;
                 }
-                Ok::<_, WriteError>(())
+                Ok(())
             })?
         } else {
             elem.write_empty()?
@@ -91,7 +97,7 @@ pub enum AtTime {
 }
 
 impl WriteXml for AtTime {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         let value = match self {
             Self::AtReboot => BytesText::new("reboot"),
             Self::TodayAt(time) => {
@@ -112,7 +118,7 @@ struct Confirm {
 }
 
 impl WriteXml for Confirm {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         _ = writer.create_element("confirmed").write_empty()?;
         if self.timeout != Timeout::default() {
             _ = writer
@@ -129,7 +135,7 @@ struct Message {
 }
 
 impl WriteXml for Message {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         _ = writer
             .create_element("log")
             .write_text_content(BytesText::new(&self.inner))?;
@@ -146,7 +152,7 @@ struct Synchronize {
 // The juniper docs are un-clear as to whether the <synchronize> and <force-synchronize> tags
 // should be used together or alternately... to check!
 impl WriteXml for Synchronize {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         let tag = if self.force {
             "force-synchronize"
         } else {

@@ -1,10 +1,12 @@
-use std::{io::Write, time::Duration};
+use std::{
+    io::{self, Write},
+    time::Duration,
+};
 
 use quick_xml::{events::BytesText, Writer};
 
 use crate::{
     capabilities::{Capability, Requirements},
-    message::WriteError,
     session::Context,
     Error,
 };
@@ -28,7 +30,7 @@ impl Operation for Commit {
 }
 
 impl WriteXml for Commit {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         let elem = writer.create_element("commit");
         if self.confirmed {
             elem.write_inner_content(|writer| {
@@ -37,7 +39,7 @@ impl WriteXml for Commit {
                     _ = writer
                         .create_element("confirm-timeout")
                         .write_text_content(self.confirm_timeout.seconds())?;
-                };
+                }
                 if let Some(ref token) = self.persist {
                     _ = writer
                         .create_element("persist")
@@ -209,7 +211,7 @@ mod tests {
             message_id: MessageId(101),
             operation: Commit {
                 confirmed: true,
-                confirm_timeout: Timeout(Duration::from_secs(60)),
+                confirm_timeout: Timeout(Duration::from_mins(1)),
                 persist: None,
                 persist_id: None,
             },

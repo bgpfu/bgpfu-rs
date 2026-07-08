@@ -1,8 +1,11 @@
-use std::{fmt::Debug, io::Write};
+use std::{
+    fmt::Debug,
+    io::{self, Write},
+};
 
 use chrono::{DateTime, Utc};
 use ip::{Afi, PrefixRange};
-use netconf::message::{WriteError, WriteXml};
+use netconf::message::WriteXml;
 use quick_xml::{events::BytesText, ElementWriter, Writer};
 
 use super::{Differences, Update, Updates};
@@ -52,7 +55,7 @@ impl Update<'_> {
 }
 
 impl WriteXml for Update<'_> {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         writer
             .create_element("configuration")
             .write_inner_content(|writer| {
@@ -65,7 +68,7 @@ impl WriteXml for Update<'_> {
                                     .create_element("name")
                                     .write_text_content(self.name())?;
                                 match self {
-                                    Self::Delete { .. } => Ok::<_, WriteError>(()),
+                                    Self::Delete { .. } => Ok(()),
                                     Self::Update { ipv4, ipv6, .. } => {
                                         ipv4.write_xml(writer)?;
                                         ipv6.write_xml(writer)?;
@@ -90,7 +93,7 @@ impl WriteXml for Update<'_> {
 }
 
 impl<A: Afi> WriteXml for Differences<'_, A> {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         let elem = {
             let elem = writer.create_element("term");
             match (self.old, self.new.is_empty()) {
@@ -121,16 +124,16 @@ impl<A: Afi> WriteXml for Differences<'_, A> {
                                     write_route_filter::<_, A>(writer, range, false)
                                 })?;
                             }
-                        };
-                        Ok::<_, WriteError>(())
+                        }
+                        Ok(())
                     })?;
                 _ = writer
                     .create_element("then")
                     .write_inner_content(|writer| {
                         writer.create_element("accept").write_empty().map(|_| ())
                     })?;
-            };
-            Ok::<_, WriteError>(())
+            }
+            Ok(())
         })?;
         Ok(())
     }
@@ -149,7 +152,7 @@ fn write_route_filter<W: Write, A: Afi>(
     writer: &mut Writer<W>,
     range: &PrefixRange<A>,
     delete: bool,
-) -> Result<(), WriteError> {
+) -> Result<(), io::Error> {
     let mut elem = writer.create_element("route-filter");
     if delete {
         elem = elem.with_attribute(("delete", "delete"));
@@ -165,7 +168,7 @@ fn write_route_filter<W: Write, A: Afi>(
                 range.lower(),
                 range.upper()
             )))?;
-        Ok::<_, WriteError>(())
+        Ok(())
     })
     .map(|_| ())
 }

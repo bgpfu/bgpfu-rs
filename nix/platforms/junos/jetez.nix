@@ -1,18 +1,18 @@
 { jetez-src, pkgs }:
 let
   jetez = pkgs.callPackage
-    ({ src, lib, python3, openssl, cdrtools, ... }:
-      python3.pkgs.buildPythonApplication {
+    ({ src, lib, python3Packages, openssl, cdrtools, ... }:
+      python3Packages.buildPythonApplication {
         pname = "jetez";
-        version = "v1.0.7";
+        version = "1.0.7";
+        pyproject = true;
         inherit src;
-        buildInputs = [
-          openssl
-        ];
-        propagatedBuildInputs = with python3.pkgs; [
+        build-system = with python3Packages; [ setuptools ];
+        dependencies = with python3Packages; [
           pyyaml
           lxml
         ];
+        buildInputs = [ openssl ];
         makeWrapperArgs = [
           "--prefix PATH : ${lib.makeBinPath [ openssl cdrtools ] }"
         ];

@@ -1,4 +1,8 @@
-use std::{fmt::Debug, io::Write, str::from_utf8};
+use std::{
+    fmt::Debug,
+    io::{self, Write},
+    str::from_utf8,
+};
 
 use async_trait::async_trait;
 use quick_xml::{
@@ -29,7 +33,7 @@ pub trait ReadXml: Sized {
 }
 
 pub trait WriteXml {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError>;
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error>;
 }
 
 #[async_trait]
@@ -64,7 +68,7 @@ pub trait ServerMsg: ReadXml {
     {
         tracing::debug!(input = input.as_ref());
         let mut reader = NsReader::from_str(input.as_ref());
-        _ = reader.trim_text(true);
+        reader.config_mut().trim_text(true);
         tracing::debug!("expecting <{}>", Self::TAG_NAME);
         let mut this = None;
         loop {
@@ -75,7 +79,7 @@ pub trait ServerMsg: ReadXml {
                 {
                     this = Some(Self::read_xml(&mut reader, &tag)?);
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::Eof) => break,
                 (_, Event::Text(txt)) if &*txt == MARKER => break,
                 // TODO:

@@ -8,10 +8,10 @@ use async_trait::async_trait;
 use bytes::{Bytes, BytesMut};
 use memchr::memmem::Finder;
 use russh::{
-    client::{connect, Config},
+    client::{connect, AuthResult, Config},
+    keys::PublicKey,
     ChannelMsg,
 };
-use russh_keys::key::PublicKey;
 use tokio::{net::ToSocketAddrs, sync::mpsc, task::JoinHandle};
 
 use super::{RecvHandle, SendHandle, Transport};
@@ -40,12 +40,12 @@ impl Ssh {
         let session = {
             let mut session = connect(config, addr, handler).await?;
             tracing::info!("ssh session established");
-            if !session
+            if let AuthResult::Failure { .. } = session
                 .authenticate_password(username.clone(), password.into_inner())
                 .await?
             {
                 return Err(Error::Authentication { username });
-            };
+            }
             tracing::info!("ssh authentication sucessful");
             session
         };
@@ -75,7 +75,7 @@ impl Ssh {
                             channel.data(data.as_ref()).await?;
                         } else {
                             break;
-                        };
+                        }
                         tracing::trace!("message sent");
                     }
                     msg = channel.wait() => {
@@ -93,7 +93,7 @@ impl Ssh {
                                         let message = in_buf.split_to(end).freeze();
                                         in_queue_tx.send(message).await?;
                                         tracing::debug!("message data enqueued sucessfully");
-                                    };
+                                    }
                                 }
                                 ChannelMsg::Eof => {
                                     tracing::info!("got eof, hanging up");
@@ -164,15 +164,14 @@ impl Handler {
     }
 }
 
-#[async_trait]
 impl russh::client::Handler for Handler {
     type Error = Error;
 
     // TODO
     #[tracing::instrument(skip_all)]
-    async fn check_server_key(self, _: &PublicKey) -> Result<(Self, bool), Self::Error> {
+    async fn check_server_key(&mut self, _: &PublicKey) -> Result<bool, Self::Error> {
         tracing::info!("NOT checking server public key");
-        Ok((self, true))
+        Ok(true)
     }
 }
 

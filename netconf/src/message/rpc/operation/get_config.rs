@@ -1,13 +1,12 @@
-use std::{fmt::Debug, io::Write, marker::PhantomData};
+use std::{
+    fmt::Debug,
+    io::{self, Write},
+    marker::PhantomData,
+};
 
 use quick_xml::Writer;
 
-use crate::{
-    capabilities::Requirements,
-    message::{ReadXml, WriteError},
-    session::Context,
-    Error,
-};
+use crate::{capabilities::Requirements, message::ReadXml, session::Context, Error};
 
 use super::{params::Required, DataReply, Datastore, Filter, Operation, WriteXml};
 
@@ -43,7 +42,7 @@ impl<D> WriteXml for GetConfig<D>
 where
     D: ReadXml + Debug + Send + Sync,
 {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         writer
             .create_element(Self::NAME)
             .write_inner_content(|writer| {
@@ -52,7 +51,7 @@ where
                     .write_inner_content(|writer| self.source.write_xml(writer))?;
                 if let Some(ref filter) = self.filter {
                     filter.write_xml(writer)?;
-                };
+                }
                 Ok(())
             })
             .map(|_| ())

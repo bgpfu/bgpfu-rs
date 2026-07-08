@@ -26,12 +26,12 @@ impl Errors {
     }
 
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
 
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.inner.len()
     }
 
@@ -52,6 +52,7 @@ impl fmt::Display for Errors {
 
 impl std::error::Error for Errors {}
 
+#[allow(clippy::struct_field_names)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Error {
     error_type: Type,
@@ -64,6 +65,7 @@ pub struct Error {
 }
 
 impl ReadXml for Error {
+    #[allow(clippy::too_many_lines)]
     #[tracing::instrument(skip_all, fields(tag = ?start.local_name()), level = "debug")]
     fn read_xml(reader: &mut NsReader<&[u8]>, start: &BytesStart<'_>) -> Result<Self, ReadError> {
         let end = start.to_end();
@@ -82,7 +84,13 @@ impl ReadXml for Error {
                         && error_type.is_none() =>
                 {
                     tracing::debug!(?tag);
-                    error_type = Some(reader.read_text(tag.to_end().name())?.trim().parse()?);
+                    error_type = Some(
+                        reader
+                            .read_text(tag.to_end().name())?
+                            .xml10_content()?
+                            .trim()
+                            .parse()?,
+                    );
                 }
                 (ResolveResult::Bound(ns), Event::Start(tag))
                     if ns == xmlns::BASE
@@ -90,7 +98,13 @@ impl ReadXml for Error {
                         && error_tag.is_none() =>
                 {
                     tracing::debug!(?tag);
-                    error_tag = Some(reader.read_text(tag.to_end().name())?.trim().parse()?);
+                    error_tag = Some(
+                        reader
+                            .read_text(tag.to_end().name())?
+                            .xml10_content()?
+                            .trim()
+                            .parse()?,
+                    );
                 }
                 (ResolveResult::Bound(ns), Event::Start(tag))
                     if ns == xmlns::BASE
@@ -98,7 +112,13 @@ impl ReadXml for Error {
                         && severity.is_none() =>
                 {
                     tracing::debug!(?tag);
-                    severity = Some(reader.read_text(tag.to_end().name())?.trim().parse()?);
+                    severity = Some(
+                        reader
+                            .read_text(tag.to_end().name())?
+                            .xml10_content()?
+                            .trim()
+                            .parse()?,
+                    );
                 }
                 (ResolveResult::Bound(ns), Event::Start(tag))
                     if ns == xmlns::BASE
@@ -109,6 +129,7 @@ impl ReadXml for Error {
                     app_tag = Some(
                         reader
                             .read_text(tag.to_end().name())?
+                            .xml10_content()?
                             .trim()
                             .parse()
                             .unwrap_or_else(|_| unreachable!()),
@@ -123,6 +144,7 @@ impl ReadXml for Error {
                     path = Some(
                         reader
                             .read_text(tag.to_end().name())?
+                            .xml10_content()?
                             .trim()
                             .parse()
                             .unwrap_or_else(|_| unreachable!()),
@@ -137,6 +159,7 @@ impl ReadXml for Error {
                     message = Some(
                         reader
                             .read_text(tag.to_end().name())?
+                            .xml10_content()?
                             .trim()
                             .parse()
                             .unwrap_or_else(|_| unreachable!()),
@@ -150,7 +173,7 @@ impl ReadXml for Error {
                     tracing::debug!(?tag);
                     info = Some(Info::read_xml(reader, &tag)?);
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
@@ -397,37 +420,55 @@ impl ReadXml for Info {
                 (ResolveResult::Bound(ns), Event::Start(tag)) if ns == xmlns::BASE => {
                     match tag.local_name().as_ref() {
                         b"bad-attribute" => inner.push(InfoElement::BadAttribute(
-                            reader.read_text(tag.to_end().name())?.as_ref().into(),
+                            reader
+                                .read_text(tag.to_end().name())?
+                                .xml10_content()?
+                                .into(),
                         )),
                         b"bad-element" => inner.push(InfoElement::BadElement(
-                            reader.read_text(tag.to_end().name())?.as_ref().into(),
+                            reader
+                                .read_text(tag.to_end().name())?
+                                .xml10_content()?
+                                .into(),
                         )),
                         b"bad-namespace" => inner.push(InfoElement::BadNamespace(
-                            reader.read_text(tag.to_end().name())?.as_ref().into(),
+                            reader
+                                .read_text(tag.to_end().name())?
+                                .xml10_content()?
+                                .into(),
                         )),
                         b"session-id" => inner.push(InfoElement::SessionId(
                             reader
                                 .read_text(tag.to_end().name())?
-                                .as_ref()
+                                .xml10_content()?
                                 .parse()
                                 .map_err(ReadError::SessionIdParse)
                                 .map(|session_id| SessionId::new(session_id).ok())?,
                         )),
                         b"ok-element" => inner.push(InfoElement::OkElement(
-                            reader.read_text(tag.to_end().name())?.as_ref().into(),
+                            reader
+                                .read_text(tag.to_end().name())?
+                                .xml10_content()?
+                                .into(),
                         )),
                         b"err-element" => inner.push(InfoElement::ErrElement(
-                            reader.read_text(tag.to_end().name())?.as_ref().into(),
+                            reader
+                                .read_text(tag.to_end().name())?
+                                .xml10_content()?
+                                .into(),
                         )),
                         b"noop-element" => inner.push(InfoElement::NoopElement(
-                            reader.read_text(tag.to_end().name())?.as_ref().into(),
+                            reader
+                                .read_text(tag.to_end().name())?
+                                .xml10_content()?
+                                .into(),
                         )),
                         name => {
                             return Err(ReadError::UnknownErrorInfo(from_utf8(name)?.to_string()))
                         }
                     }
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
@@ -454,7 +495,7 @@ pub enum InfoElement {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
+    use std::io::{self, Write};
 
     use quick_xml::Writer;
 
@@ -463,7 +504,7 @@ mod tests {
         capabilities::Requirements,
         message::{
             rpc::{operation, EmptyReply, MessageId, Operation, PartialReply, Reply},
-            ServerMsg, WriteError, WriteXml,
+            ServerMsg, WriteXml,
         },
     };
 
@@ -478,7 +519,7 @@ mod tests {
     }
 
     impl WriteXml for Dummy {
-        fn write_xml<W: Write>(&self, _: &mut Writer<W>) -> Result<(), WriteError> {
+        fn write_xml<W: Write>(&self, _: &mut Writer<W>) -> Result<(), io::Error> {
             Ok(())
         }
     }

@@ -1,8 +1,8 @@
 { pkgs, crane, toolchains, advisory-db, src }:
 let
-  inherit (pkgs) lib linkFarm;
-  inherit (builtins) attrNames length listToAttrs mapAttrs;
-  inherit (lib) concatStringsSep findSingle importJSON
+  inherit (pkgs) lib linkFarm writeText;
+  inherit (builtins) attrNames length listToAttrs mapAttrs toJSON;
+  inherit (lib) concatStringsSep findSingle importJSON mapAttrsToList
     nameValuePair optionals optionalAttrs optionalString remove;
 
   baseLib = crane.mkLib pkgs;
@@ -16,6 +16,12 @@ let
     doCheck = false;
   };
 
+  workspaceMetadata = toolchainName:
+    importJSON (toolchains.${toolchainName}.craneLib.cargoMetadata commonArgs);
+
+  buildDeps = { toolchainName, packageName, featureSet } @ args:
+    toolchains.${toolchainName}.craneLib.buildDepsOnly (buildArgs args);
+
   buildArgs =
     { toolchainName
     , packageName
@@ -27,36 +33,19 @@ let
       inherit (featureSet) name set;
       featureArgs =
         if name == "default" then ""
+        else if name == "all" then "--all-features"
         else "--no-default-features"
           + optionalString (length set > 0) " -F ${concatStringsSep "," set}";
-      buildDeps = { toolchainName, ... } @ args:
-        let
-          toolchain = toolchains.${toolchainName};
-          craneLib = mkLib toolchain;
-        in
-        craneLib.buildDepsOnly (buildArgs args);
-    in
-    commonArgs // {
-      pname = "${packageName}-${toolchainName}-feature-set-${name}";
-      cargoExtraArgs = "-p ${packageName} ${featureArgs} ${extraExtraArgs}";
-    } // optionalAttrs withDependencies {
       cargoArtifacts = buildDeps {
         inherit toolchainName packageName featureSet;
       };
-    };
-
-
-  mkLib = toolchain:
-    let craneLib = baseLib.overrideToolchain toolchain; in
-    craneLib // {
-      cargoMetadata = { ... } @ args: craneLib.mkCargoDerivation (args // {
-        cargoArtifacts = null;
-        pnameSuffix = "-metadata";
-        buildPhaseCargoCommand = "cargo metadata --no-deps --format-version 1 >$out";
-        doInstallCargoArtifacts = false;
-        installPhaseCommand = "";
-      });
-    };
+    in
+    commonArgs
+    // {
+      pname = "${packageName}-${toolchainName}-feature-set-${name}";
+      cargoExtraArgs = "-p ${packageName} ${featureArgs} ${extraExtraArgs}";
+    }
+    // optionalAttrs withDependencies { inherit cargoArtifacts; };
 
   featureSets = features:
     let
@@ -69,40 +58,58 @@ let
         else concatStringsSep "+" set;
       nonDefaultFeatures = remove "default" features;
     in
-    [{ name = "default"; set = null; }]
-    ++ optionals (length features > 0) (map
+    [
+      { name = "default"; set = null; }
+      { name = "all"; set = null; }
+    ] ++ optionals (length features > 0) (map
       (set: { name = setName set; inherit set; })
       (powerSet nonDefaultFeatures));
 
   checkGroup = name: entries:
-    let group = linkFarm "${name}-checks" entries; in
-    group.overrideAttrs (_: prev: { passthru.checks = prev.passthru.entries; });
+    let
+      group = linkFarm "${name}-checks" entries;
+    in
+    group.overrideAttrs (_: prev:
+      let
+        checks = prev.passthru.entries;
+        flatChecks =
+          let
+            pred = value: value ? checks;
+            name = path: lib.concatStringsSep "_" path;
+            item = path: value: lib.nameValuePair (name path) value;
+            mapRecursive = path: value:
+              if lib.isAttrs value && pred value
+              then recurse path value.checks
+              else [ (item path value) ];
+            recurse = path: set: lib.concatMap
+              (name: mapRecursive (path ++ [ name ]) set.${name})
+              (lib.attrNames set);
+          in lib.listToAttrs (recurse [ ] checks);
+        jobs = mapAttrsToList
+          (name: check: {
+            inherit name;
+            postStep =  /* bash */ ''
+              echo "no-op"
+            '';
+          })
+          flatChecks;
+        matrix = writeText "${name}-matrix.json" (toJSON jobs);
+      in {
+      passthru = {
+        inherit checks matrix flatChecks;
+      };
+    });
 
   checks = mapAttrs
-    (toolchainName: toolchain:
+    (toolchainName: { toolchain, craneLib }:
       let
-        craneLib = mkLib toolchain;
-        metadata = importJSON (craneLib.cargoMetadata commonArgs);
+        metadata = workspaceMetadata toolchainName;
         packages = map
           ({ name, features, ... }: {
             inherit name;
             featureSets = featureSets (attrNames features);
           })
           metadata.packages;
-        clippy = { name, featureSets, ... }:
-          checkGroup name (map
-            (featureSet: {
-              inherit (featureSet) name;
-              path = craneLib.cargoClippy (buildArgs
-                {
-                  inherit toolchainName featureSet;
-                  packageName = name;
-                  withDependencies = true;
-                } // {
-                cargoClippyExtraArgs = "--all-targets -- --deny warnings";
-              });
-            })
-            featureSets);
       in
       checkGroup toolchainName {
         audit = craneLib.cargoAudit (commonArgs // {
@@ -110,12 +117,76 @@ let
         });
         deny = craneLib.cargoDeny commonArgs;
         fmt = craneLib.cargoFmt commonArgs;
+        taplo-fmt = craneLib.taploFmt (commonArgs // {
+          taploExtraArgs = "--diff";
+        });
+        docs = craneLib.cargoDoc (commonArgs // rec {
+          pname = "bgpfu-${toolchainName}";
+          cargoExtraArgs = "--workspace --all-features";
+          cargoArtifacts = craneLib.buildDepsOnly {
+            inherit src pname cargoExtraArgs;
+          };
+          cargoDocExtraArgs = "--no-deps --lib";
+          RUSTDOCFLAGS = concatStringsSep " " ([
+            "-D warnings"
+          ] ++ optionals (toolchainName == "nightly") [
+            "--cfg docsrs"
+          ]);
+        });
         clippy = checkGroup "clippy" (map
-          (package: {
-            inherit (package) name;
-            path = clippy package;
+          ({ name, featureSets }: {
+            inherit name;
+            path = checkGroup name (map
+              (featureSet: {
+                inherit (featureSet) name;
+                path = craneLib.cargoClippy (buildArgs {
+                  inherit toolchainName featureSet;
+                  packageName = name;
+                  withDependencies = true;
+                } // {
+                  cargoClippyExtraArgs = "--all-targets -- --deny warnings";
+                });
+              })
+              featureSets);
           })
           packages);
+        llvm-cov = checkGroup "llvm-cov" (map
+          ({ name, featureSets }: {
+            inherit name;
+            path = checkGroup name (map
+              (featureSet: {
+                inherit (featureSet) name;
+                path = checkGroup featureSet.name (lib.mapAttrsToList
+                  (suiteName: cargoLlvmCovExtraArgs: {
+                    name = suiteName;
+                    path = craneLib.cargoLlvmCov (buildArgs {
+                      inherit toolchainName featureSet;
+                      packageName = name;
+                      withDependencies = true;
+                    } // {
+                      inherit cargoLlvmCovExtraArgs;
+                    });
+                  })
+                  {
+                    all = "--lcov --output-path $out";
+                  });
+              })
+              featureSets);
+          })
+          packages);
+      })
+    toolchains;
+
+  devShells = mapAttrs
+    (toolchainName: { craneLib, toolchain }:
+      craneLib.devShell {
+        checks = checks.${toolchainName}.flatChecks;
+        TOOLCHAIN = toolchain;
+        WORKSPACE_METADATA = toJSON (workspaceMetadata toolchainName);
+        shellHook = ''
+          export CARGO_HOME="$XDG_DATA_HOME/cargo"
+          source "$TOOLCHAIN/etc/bash_completion.d/cargo"
+        '';
       })
     toolchains;
 
@@ -126,11 +197,10 @@ let
     , extraPlatforms ? [ ]
     }:
     let
-      toolchain = toolchains.${toolchainName};
-      craneLib = mkLib toolchain;
+      inherit (toolchains.${toolchainName}) craneLib;
       meta =
         let
-          metadata = importJSON (craneLib.cargoMetadata commonArgs);
+          metadata = workspaceMetadata toolchainName;
           packageMetadata = findSingle (p: p.name == pname)
             (throw "package ${pname} not found")
             (throw "duplicate metadata for package ${pname}")
@@ -152,5 +222,5 @@ let
     defaultPlatform.mkPackage craneLib.buildPackage (baseArgs // { inherit passthru; });
 in
 {
-  inherit buildBinWith checks;
+  inherit buildBinWith checks devShells;
 }

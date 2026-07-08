@@ -131,7 +131,7 @@ pub(crate) struct Loop<T> {
     period: Duration,
 }
 
-const MIN_BACKOFF: Duration = Duration::from_secs(60);
+const MIN_BACKOFF: Duration = Duration::from_mins(1);
 
 impl<T: Target + 'static> Loop<T> {
     #[tracing::instrument(skip(self), level = "trace")]

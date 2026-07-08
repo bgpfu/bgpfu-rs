@@ -1,10 +1,9 @@
-use std::io::Write;
+use std::io::{self, Write};
 
 use quick_xml::Writer;
 
 use crate::{
     capabilities::{Capability, Requirements},
-    message::WriteError,
     session::Context,
     Error,
 };
@@ -26,7 +25,7 @@ impl Operation for DiscardChanges {
 }
 
 impl WriteXml for DiscardChanges {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         _ = writer.create_element("discard-changes").write_empty()?;
         Ok(())
     }

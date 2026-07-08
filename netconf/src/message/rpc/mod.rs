@@ -1,12 +1,16 @@
-use std::{fmt::Debug, io::Write, str::from_utf8};
+use std::{
+    fmt::Debug,
+    io::{self, Write},
+    str::from_utf8,
+};
 
 use quick_xml::{
     events::{attributes::Attribute, BytesStart, Event},
     name::{Namespace, ResolveResult},
-    NsReader, Writer,
+    NsReader, Writer, XmlVersion,
 };
 
-use super::{xmlns, ClientMsg, ReadError, ReadXml, ServerMsg, WriteError, WriteXml, MARKER};
+use super::{xmlns, ClientMsg, ReadError, ReadXml, ServerMsg, WriteXml, MARKER};
 
 pub mod error;
 pub use self::error::{Error, Errors};
@@ -18,7 +22,7 @@ pub(crate) use self::operation::Operation;
 pub struct MessageId(usize);
 
 impl MessageId {
-    pub(crate) fn increment(&mut self) -> Self {
+    pub(crate) const fn increment(&mut self) -> Self {
         self.0 += 1;
         *self
     }
@@ -30,8 +34,7 @@ impl TryFrom<Attribute<'_>> for MessageId {
     fn try_from(value: Attribute<'_>) -> Result<Self, Self::Error> {
         Ok(Self(
             value
-                .unescape_value()?
-                .as_ref()
+                .normalized_value(XmlVersion::Implicit1_0)?
                 .parse()
                 .map_err(ReadError::MessageIdParse)?,
         ))
@@ -54,7 +57,7 @@ impl<O: Operation> Request<O> {
 }
 
 impl<O: Operation> WriteXml for Request<O> {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         writer
             .create_element("rpc")
             .with_attribute(("message-id", self.message_id.0.to_string().as_ref()))
@@ -90,7 +93,7 @@ impl ServerMsg for PartialReply {
         S: AsRef<str> + Debug,
     {
         let mut reader = NsReader::from_str(input.as_ref());
-        _ = reader.trim_text(true);
+        reader.config_mut().trim_text(true);
         Self::read_xml(&mut reader, &BytesStart::new("dummy"))
     }
 }
@@ -115,7 +118,7 @@ impl ReadXml for PartialReply {
                         .transpose()?;
                     _ = reader.read_to_end(end.name());
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::Eof) => break,
                 (_, Event::Text(txt)) if &*txt == MARKER => break,
                 (ns, event) => {
@@ -172,7 +175,7 @@ impl<O: Operation> TryFrom<PartialReply> for Reply<O> {
                 value.message_id,
                 this.message_id,
             ));
-        };
+        }
         Ok(this)
     }
 }
@@ -214,7 +217,7 @@ impl ReadXml for EmptyReply {
                     tracing::debug!(?tag);
                     errors.push(Error::read_xml(reader, &tag)?);
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
@@ -222,7 +225,7 @@ impl ReadXml for EmptyReply {
                 }
             }
         }
-        this.or_else(|| (!errors.is_empty()).then(|| Self::Errs(errors)))
+        this.or_else(|| (!errors.is_empty()).then_some(Self::Errs(errors)))
             .ok_or_else(|| ReadError::missing_element("rpc-reply", "ok/rpc-error"))
     }
 }
@@ -269,7 +272,7 @@ impl<D: ReadXml> ReadXml for DataReply<D> {
                     tracing::debug!(?tag);
                     errors.push(Error::read_xml(reader, &tag)?);
                 }
-                (_, Event::Comment(_)) => continue,
+                (_, Event::Comment(_)) => (),
                 (_, Event::End(tag)) if tag == end => break,
                 (ns, event) => {
                     tracing::error!(?event, ?ns, "unexpected xml event");
@@ -293,6 +296,8 @@ impl<D> IntoResult for DataReply<D> {
 }
 #[cfg(test)]
 mod tests {
+    use std::io;
+
     use quick_xml::events::BytesText;
 
     use super::*;
@@ -304,7 +309,7 @@ mod tests {
     }
 
     impl WriteXml for Foo {
-        fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
             _ = writer
                 .create_element("foo")
                 .write_text_content(BytesText::new(self.foo))?;
@@ -395,7 +400,7 @@ mod tests {
     struct Bar;
 
     impl WriteXml for Bar {
-        fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+        fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
             _ = writer.create_element("bar").write_empty()?;
             Ok(())
         }
@@ -429,11 +434,12 @@ mod tests {
                         result = Some(
                             reader
                                 .read_text(tag.to_end().name())?
+                                .xml10_content()?
                                 .parse::<usize>()
                                 .map_err(|err| ReadError::Other(err.into()))?,
                         );
                     }
-                    (_, Event::Comment(_)) => continue,
+                    (_, Event::Comment(_)) => (),
                     (_, Event::End(tag)) if tag == end => break,
                     (ns, event) => {
                         tracing::error!(?event, ?ns, "unexpected xml event");

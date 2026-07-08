@@ -16,20 +16,16 @@ name = "netconf"
 
 [features]
 default = ["ssh", "tls"]
-ssh = ["dep:russh", "dep:russh-keys"]
+ssh = ["dep:russh"]
 tls = [
-    "dep:tokio-rustls",
-    "dep:rustls-pki-types",
-    "tokio/sync",
-    "tokio/io-util",
-    "tokio/macros",
-    "tokio/net",
+  "dep:tokio-rustls",
+  "dep:rustls-pki-types",
+  "tokio/sync",
+  "tokio/io-util",
+  "tokio/macros",
+  "tokio/net",
 ]
-junos = [
-    "dep:chrono",
-    "dep:paste",
-    "tokio/process",
-]
+junos = ["dep:chrono", "dep:pastey", "tokio/process"]
 
 [dependencies]
 async-trait.workspace = true
@@ -41,10 +37,9 @@ thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
-chrono = {workspace = true, optional = true}
-paste = { workspace = true, optional = true }
+chrono = { workspace = true, optional = true }
+pastey = { workspace = true, optional = true }
 russh = { workspace = true, optional = true }
-russh-keys = { workspace = true, optional = true }
 rustls-pki-types = { workspace = true, optional = true }
 tokio-rustls = { workspace = true, optional = true }
 
@@ -53,7 +48,6 @@ tokio-rustls = { workspace = true, optional = true }
 anyhow.workspace = true
 clap.workspace = true
 clap-verbosity-flag.workspace = true
-rustls-pemfile.workspace = true
 tracing-log.workspace = true
 tracing-subscriber.workspace = true
 version-sync.workspace = true

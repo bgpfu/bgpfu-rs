@@ -1,8 +1,8 @@
-{ pkgs, fenix, platforms, toolchainManifests }:
+{ pkgs, crane, fenix, platforms, toolchainManifests }:
 let
-  inherit (pkgs) system lib;
-  inherit (builtins) mapAttrs map;
-  inherit (lib) filterAttrs mapAttrsToList;
+  inherit (pkgs) lib;
+  inherit (pkgs.stdenv.hostPlatform) system;
+  inherit (lib) filterAttrs map mapAttrs mapAttrsToList;
 
   fenixPkgs = fenix.packages.${system};
 
@@ -26,9 +26,28 @@ let
       clippy
       rustfmt
       llvm-tools
+      rust-analyzer
+      rust-src
     ] ++ crossComponents manifest;
 
+  mkCraneLib = toolchain:
+    let
+      baseLib = crane.mkLib pkgs;
+      craneLib = baseLib.overrideToolchain toolchain;
+    in
+    craneLib // {
+      cargoMetadata = { ... } @ args: craneLib.mkCargoDerivation (args // {
+        cargoArtifacts = null;
+        pnameSuffix = "-metadata";
+        buildPhaseCargoCommand = "cargo metadata --no-deps --format-version 1 >$out";
+        doInstallCargoArtifacts = false;
+        installPhaseCommand = "";
+      });
+    };
 in
 mapAttrs
-  (_: manifest: fenixPkgs.combine (components manifest))
+  (_: manifest: rec {
+    toolchain = fenixPkgs.combine (components manifest);
+    craneLib = mkCraneLib toolchain;
+  })
   toolchainManifests

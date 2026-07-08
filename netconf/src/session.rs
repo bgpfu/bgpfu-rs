@@ -152,6 +152,10 @@ impl OutstandingRequest {
 #[cfg(feature = "ssh")]
 impl Session<Ssh> {
     /// Establish a new NETCONF session over an SSH transport.
+    ///
+    /// # Errors
+    ///
+    /// An [`Error`] is returned if the underlying SSH session fails to establish successfully.
     #[tracing::instrument(level = "debug")]
     pub async fn ssh<A>(addr: A, username: String, password: Password) -> Result<Self, Error>
     where
@@ -166,6 +170,10 @@ impl Session<Ssh> {
 #[cfg(feature = "tls")]
 impl Session<Tls> {
     /// Establish a new NETCONF session over a TLS transport.
+    ///
+    /// # Errors
+    ///
+    /// An [`Error`] is returned if the underlying TLS connection fails to establish successfully.
     #[tracing::instrument(skip(ca_cert, client_cert, client_key), level = "debug")]
     pub async fn tls<A, S>(
         addr: A,
@@ -188,6 +196,10 @@ impl Session<Tls> {
 #[cfg(feature = "junos")]
 impl Session<JunosLocal> {
     /// Establish a new NETCONF session via the local Junos `cli` binary.
+    ///
+    /// # Errors
+    ///
+    /// An [`Error`] is returned if the `cli` subprocess can't be spawned successfully.
     #[tracing::instrument(level = "debug")]
     pub async fn junos_local() -> Result<Self, Error> {
         tracing::info!("starting local junos transport");
@@ -248,6 +260,8 @@ impl<T: Transport> Session<T> {
     ///
     /// The `Output` of both the outer and inner `Future` are of type `Result`.
     ///
+    /// # Errors
+    ///
     /// An [`Err`] variant returned by awaiting the outer future indicates either a request validation
     /// error or a session/transport error encountered while sending the RPC request.
     ///
@@ -274,7 +288,7 @@ impl<T: Transport> Session<T> {
                 request.send(&mut *self.transport_tx.lock().await).await?;
                 _ = entry.insert(OutstandingRequest::Pending);
             }
-        };
+        }
         let requests = self.requests.clone();
         let rx = self.transport_rx.clone();
         Ok(Self::recv::<O>(message_id, requests, rx))
@@ -296,20 +310,19 @@ impl<T: Transport> Session<T> {
             let mut rx_guard = rx.lock().await;
             tracing::trace!(?requests);
             tracing::debug!("checking for ready response");
-            if let Some(partial) = requests
+            let maybe_partial = requests
                 .lock()
                 .await
                 .get_mut(&message_id)
                 .ok_or(Error::RequestNotFound { message_id })?
-                .take()?
-            {
+                .take()?;
+            if let Some(partial) = maybe_partial {
                 tracing::debug!("found ready response");
                 let reply: rpc::Reply<O> = partial.try_into()?;
                 break reply.into_result();
-            };
+            }
             tracing::debug!("response to {message_id:?} not yet ready");
             let reply = rpc::PartialReply::recv(&mut *rx_guard).await?;
-            #[allow(clippy::significant_drop_in_scrutinee)]
             match requests
                 .lock()
                 .await
@@ -327,12 +340,16 @@ impl<T: Transport> Session<T> {
                     tracing::debug!("storing response to {:?}", reply.message_id());
                     _ = mem::replace(pending, OutstandingRequest::Ready(reply));
                 }
-            };
+            }
             drop(rx_guard);
         }
     }
 
     /// Close the NETCONF session gracefully using the `<close-session>` RPC operation.
+    ///
+    /// # Errors
+    ///
+    /// See [`Session::rpc`].
     #[tracing::instrument(skip(self), level = "debug")]
     pub async fn close(mut self) -> Result<impl Future<Output = Result<(), Error>>, Error> {
         self.rpc::<CloseSession, _>(Builder::finish)

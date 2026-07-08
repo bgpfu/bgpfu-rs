@@ -1,10 +1,12 @@
-use std::{fmt::Debug, io::Write};
+use std::{
+    fmt::Debug,
+    io::{self, Write},
+};
 
 use quick_xml::{events::BytesText, Writer};
 
 use crate::{
     capabilities::{Capability, Requirements},
-    message::WriteError,
     session::Context,
     Error,
 };
@@ -34,7 +36,7 @@ impl<D> WriteXml for EditConfig<D>
 where
     D: WriteXml + Debug + Send + Sync,
 {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         writer
             .create_element(Self::NAME)
             .write_inner_content(|writer| {
@@ -45,17 +47,17 @@ where
                     _ = writer
                         .create_element("default-operation")
                         .write_text_content(BytesText::new(self.default_operation.as_str()))?;
-                };
+                }
                 if self.error_option.is_non_default() {
                     _ = writer
                         .create_element("error-option")
                         .write_text_content(BytesText::new(self.error_option.as_str()))?;
-                };
+                }
                 if self.test_option.is_non_default() {
                     _ = writer
                         .create_element("test-option")
                         .write_text_content(BytesText::new(self.test_option.as_str()))?;
-                };
+                }
                 self.source.write_xml(writer)?;
                 Ok(())
             })
@@ -153,7 +155,7 @@ impl<D> WriteXml for Source<D>
 where
     D: WriteXml,
 {
-    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), WriteError> {
+    fn write_xml<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), io::Error> {
         match self {
             Self::Config(config) => writer
                 .create_element("config")
